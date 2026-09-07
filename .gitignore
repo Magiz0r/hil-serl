@@ -1,0 +1,19 @@
+# Local Python build artifacts (upstream-tracked files remain tracked)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+!.env.example
+
+# Machine-local installation evidence; portable locks are tracked
+/reproduction/logs/
+/reproduction/pip-freeze.txt
+
+# Generated experiment data and checkpoints
+wandb/
+**/demo_data/
+**/classifier_data/
+**/classifier_ckpt/
+**/checkpoints/
