@@ -108,3 +108,6 @@ ssh -o BatchMode=yes -o ConnectTimeout=8 FrankaNUC 'docker exec -i rteleop-droid
 - 临时容器均--rm自动删除；构建后docker ps仍只有原四个容器。未创建持久新容器、未映射/dev、未访问FR3/夹爪、未切换FCI或停止DROID。
 
 当前结果属于“控制端镜像构建成功、离线目标环境导入通过”。尚未达到“新server运行”或“真机验证通过”。下一硬件边界是停止当前DROID、创建但先不启动动作服务的独立容器、启动ROS控制器并观察状态；需在操作者/E-stop准备好后另行批准。
+
+### 2026-09-18 最终容器状态复核
+通过 `ssh FrankaNUC "docker ps -a"` 只读检查，当前没有名为 `rteleop-droid-nuc` 的容器。现存历史容器为：`remote-teleop-ros2`、`remote-teleop-serl-soft`、`rlinf-explore` 运行中；`rteleop-rlinf-nuc`、`remote-teleop-serl` 已退出（137）。本轮命令没有停止、删除或重建这些容器；此前记录的 DROID 运行状态与本次最终列表不一致，后续真机前需重新确认实际控制服务归属和启动方式。

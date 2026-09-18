@@ -90,3 +90,4 @@ SSH已接通并完成NUC只读核验，旧runbook已读取；详见[HARDWARE.md]
 2026-09-18继续：FR3系统5.9.2满足libfranka0.18.1官方版本下限；Robotiq独立FC03状态读成功，CRC校验通过，但返回通信超时故障0x09。没有执行清错、激活或运动。协议测试新增3项，共8项离线测试通过；详见HARDWARE.md。完整RS485动作后端和独立控制端部署尚未完成。
 
 后续连续只读查询使Robotiq故障码从0x09恢复为0x00，无控制写入。已实现构造只读的RS485后端并接入`--gripper_type=RobotiqRS485`；13项离线测试通过。NUC独立镜像`hil-serl-fr3:2026-09-18`离线构建成功，无网络/无设备临时容器导入验证通过；未创建持久容器或启动server。准确镜像ID、wheel哈希与边界见HARDWARE.md及reproduction/nuc/。
+最终只读 `docker ps -a` 未发现 `rteleop-droid-nuc`；现有历史容器状态已记录于HARDWARE.md。本轮未停止、删除或重建任何原有容器。真机前需重新确认当前控制服务归属，不能沿用旧DROID运行状态假设。
