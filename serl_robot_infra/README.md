@@ -37,13 +37,19 @@ export ROS_MASTER_URI=http://localhost:<ros_port_number>
 
 # script to start http server and ros controller
 python franka_server.py \
-    --gripper_type=<Robotiq|Franka|None> \
+    --gripper_type=<Robotiq|RobotiqRS485|Franka|None> \
     --robot_ip=<robot_IP> \
     --gripper_ip=<[Optional] Robotiq_gripper_IP> \
+    --gripper_device=<[Optional] Robotiq_RS485_device> \
     --reset_joint_target=<[Optional] robot_joints_when_robot_resets> \
     --flask_url=<url_to_serve> \
     --ros_port=<ros_port_number> \
 ```
+
+`Robotiq` retains the upstream TCP/ROS-node backend. `RobotiqRS485` uses a
+direct Modbus RTU serial connection (for example `/dev/ttyUSB0`). Constructing
+the RS485 backend reads status once but does not activate, reset, or move the
+gripper; those remain explicit HTTP operations.
 
 This should start ROS node impedence controller and the HTTP server. You can test that things are running by trying to move the end effector around, if the impedence controller is running it should be compliant.
 

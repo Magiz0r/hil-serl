@@ -24,7 +24,14 @@ flags.DEFINE_string(
     "gripper_ip", "192.168.1.114", "IP address of the robotiq gripper if being used"
 )
 flags.DEFINE_string(
-    "gripper_type", "Robotiq", "Type of gripper to use: Robotiq, Franka, or None"
+    "gripper_device",
+    "/dev/ttyUSB0",
+    "Serial device for a RobotiqRS485 gripper",
+)
+flags.DEFINE_string(
+    "gripper_type",
+    "Robotiq",
+    "Type of gripper: Robotiq (TCP ROS node), RobotiqRS485, Franka, or None",
 )
 flags.DEFINE_list(
     "reset_joint_target",
@@ -184,6 +191,7 @@ def main(_):
 
     ROBOT_IP = FLAGS.robot_ip
     GRIPPER_IP = FLAGS.gripper_ip
+    GRIPPER_DEVICE = FLAGS.gripper_device
     GRIPPER_TYPE = FLAGS.gripper_type
     RESET_JOINT_TARGET = FLAGS.reset_joint_target
 
@@ -202,6 +210,12 @@ def main(_):
         from robot_servers.robotiq_gripper_server import RobotiqGripperServer
 
         gripper_server = RobotiqGripperServer(gripper_ip=GRIPPER_IP)
+    elif GRIPPER_TYPE == "RobotiqRS485":
+        from robot_servers.robotiq_rs485_gripper_server import (
+            RobotiqRS485GripperServer,
+        )
+
+        gripper_server = RobotiqRS485GripperServer(device=GRIPPER_DEVICE)
     elif GRIPPER_TYPE == "Franka":
         from robot_servers.franka_gripper_server import FrankaGripperServer
 
@@ -291,7 +305,7 @@ def main(_):
     # Route for getting gripper distance
     @webapp.route("/get_gripper", methods=["POST"])
     def get_gripper():
-        return jsonify({"gripper": gripper_server.gripper_pos})
+        return jsonify({"gripper": gripper_server.get_position()})
 
     # Route for Running Joint Reset
     @webapp.route("/jointreset", methods=["POST"])
@@ -370,7 +384,7 @@ def main(_):
                 "q": np.array(robot_server.q).tolist(),
                 "dq": np.array(robot_server.dq).tolist(),
                 "jacobian": np.array(robot_server.jacobian).tolist(),
-                "gripper_pos": gripper_server.gripper_pos,
+                "gripper_pos": gripper_server.get_position(),
             }
         )
 

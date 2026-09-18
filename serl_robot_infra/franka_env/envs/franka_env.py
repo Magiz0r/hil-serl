@@ -397,9 +397,16 @@ class FrankaEnv(gym.Env):
 
         self.cap = OrderedDict()
         for cam_name, kwargs in name_serial_dict.items():
-            cap = VideoCapture(
-                RSCapture(name=cam_name, **kwargs)
-            )
+            camera_kwargs = dict(kwargs)
+            backend = camera_kwargs.pop("backend", "realsense")
+            if backend == "realsense":
+                capture_class = RSCapture
+            elif backend == "zed_uvc":
+                from franka_env.camera.zed_uvc_capture import ZEDUVCCapture
+                capture_class = ZEDUVCCapture
+            else:
+                raise ValueError(f"Unknown camera backend: {backend}")
+            cap = VideoCapture(capture_class(name=cam_name, **camera_kwargs))
             self.cap[cam_name] = cap
 
     def close_cameras(self):

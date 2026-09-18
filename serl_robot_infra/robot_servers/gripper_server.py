@@ -16,3 +16,6 @@ class GripperServer:
 
     def reset_gripper(self):
         pass
+
+    def get_position(self):
+        return self.gripper_pos

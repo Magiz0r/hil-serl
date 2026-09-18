@@ -10,6 +10,7 @@ __pycache__/
 # Machine-local installation evidence; portable locks are tracked
 /reproduction/logs/
 /reproduction/pip-freeze.txt
+/reproduction/nuc/wheels/
 
 # Generated experiment data and checkpoints
 wandb/

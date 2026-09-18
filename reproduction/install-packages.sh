@@ -9,6 +9,7 @@ python -m pip install --no-build-isolation --config-settings editable_mode=compa
 python -m pip install -r requirements.txt
 cd ../serl_robot_infra
 python -m pip install --no-build-isolation --config-settings editable_mode=compat -e .
+python -m pip install 'pytest==8.3.5'
 python -m pip check
 python -m pip freeze --all > ../reproduction/pip-freeze.txt
 conda list --explicit > ../reproduction/conda-explicit.txt

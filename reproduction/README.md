@@ -75,3 +75,18 @@ GPU 在 Codex 沙箱内不可见，以上测试已通过正常审批在宿主机
 ## Fork 与开发分支
 2026-09-06：origin 已关联 https://github.com/Magiz0r/hil-serl.git；upstream 保留 https://github.com/rail-berkeley/hil-serl.git。Fork 的 main 与上述官方固定 commit 一致。本地适配分支 fr3-reproduction 从该 commit 创建。
 新增 .gitignore 排除安装日志、机器相关原始 pip freeze、Python 构建产物及常见演示/分类器数据/checkpoint 目录；准确可移植版本保存在 constraints.lock.txt 和 conda-explicit.txt。原始日志仍留本机用于排查。此步骤未推送远程。
+
+## 2026-09-07 基础硬件推进
+SSH已接通并完成NUC只读核验，旧runbook已读取；详见[HARDWARE.md](HARDWARE.md)，其中更新了上文待补信息。
+新增可选ZED UVC后端、相机配置与相机专用探测脚本，4项离线契约测试通过。相机尚受设备ACL限制，SpaceMouse尚未连接，夹爪通信尚未验证。未启动机器人或变更现有部署。本轮修改尚未提交/推送。
+
+## 2026-09-08 相机实采结果
+新用户设备权限已生效；ZED2i外部、ZED-M腕部均成功读取30帧，1280×720单眼BGR→128×128 RGB转换通过，并已检查本地预览。详细结果及限制见HARDWARE.md最新段落。下一项是Robotiq连接方式和FR3固件核验，SpaceMouse待插入；机器人动作仍未授权或执行。
+
+## 2026-09-18 状态复核
+见HARDWARE.md最新记录。发现当前DROID服务运行、两台ZED2i的by-id名称冲突以及相机临时ACL失效；未启动控制或重新采图。旧DROID配置确认Robotiq使用ttyUSB0串口。4项离线测试仍通过；真实夹爪通信及FR3固件待核验。
+2026-09-18后续：原外部相机改用USB端口路径，权限恢复后两路各30帧实采通过，预览已核验。未打开第二台ZED2i，未执行机器人动作。
+2026-09-18补充：通过机器人Desk/Admin只读接口已自动读取FR3系统版本5.9.2，无需用户手工提供；未启动FCI。具体响应和来源见HARDWARE.md。
+2026-09-18继续：FR3系统5.9.2满足libfranka0.18.1官方版本下限；Robotiq独立FC03状态读成功，CRC校验通过，但返回通信超时故障0x09。没有执行清错、激活或运动。协议测试新增3项，共8项离线测试通过；详见HARDWARE.md。完整RS485动作后端和独立控制端部署尚未完成。
+
+后续连续只读查询使Robotiq故障码从0x09恢复为0x00，无控制写入。已实现构造只读的RS485后端并接入`--gripper_type=RobotiqRS485`；13项离线测试通过。NUC独立镜像`hil-serl-fr3:2026-09-18`离线构建成功，无网络/无设备临时容器导入验证通过；未创建持久容器或启动server。准确镜像ID、wheel哈希与边界见HARDWARE.md及reproduction/nuc/。
