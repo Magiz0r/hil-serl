@@ -111,3 +111,4 @@ ssh -o BatchMode=yes -o ConnectTimeout=8 FrankaNUC 'docker exec -i rteleop-droid
 
 ### 2026-09-18 最终容器状态复核
 通过 `ssh FrankaNUC "docker ps -a"` 只读检查，当前没有名为 `rteleop-droid-nuc` 的容器。现存历史容器为：`remote-teleop-ros2`、`remote-teleop-serl-soft`、`rlinf-explore` 运行中；`rteleop-rlinf-nuc`、`remote-teleop-serl` 已退出（137）。本轮命令没有停止、删除或重建这些容器；此前记录的 DROID 运行状态与本次最终列表不一致，后续真机前需重新确认实际控制服务归属和启动方式。
+同次 NUC 进程/端口只读检查未发现运行中的 `roscore`、`roslaunch`、Franka 控制器或 SERL server；4243 由 `/home/tasl/franka_bench/.venv/bin/uvicorn freedrive_sidecar:app` 监听。另有多个跟踪 `/home/tasl/remote_teleop_droid/trace/droid_trace.jsonl` 的 `tail` 进程，但未发现对应 DROID 控制进程。未停止、重启或连接这些进程；真机前需把 freedrive sidecar 和日志跟踪进程纳入服务归属核对。
