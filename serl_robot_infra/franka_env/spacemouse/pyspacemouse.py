@@ -534,6 +534,27 @@ device_specs = {
         ],  # FIT
         axis_scale=350.0,
     ),
+    "SpaceMouse Wireless BT": DeviceSpec(
+        name="SpaceMouse Wireless BT",
+        # USB connection of the Bluetooth-edition device. The observed HID
+        # descriptor reports six signed 16-bit axes (-350..350) in report 1
+        # and two buttons in report 3, matching SpaceMouse Wireless.
+        hid_id=[0x256F, 0xC63A],
+        led_id=[0x8, 0x4B],
+        mappings={
+            "x": AxisSpec(channel=1, byte1=1, byte2=2, scale=1),
+            "y": AxisSpec(channel=1, byte1=3, byte2=4, scale=-1),
+            "z": AxisSpec(channel=1, byte1=5, byte2=6, scale=-1),
+            "pitch": AxisSpec(channel=1, byte1=7, byte2=8, scale=-1),
+            "roll": AxisSpec(channel=1, byte1=9, byte2=10, scale=-1),
+            "yaw": AxisSpec(channel=1, byte1=11, byte2=12, scale=1),
+        },
+        button_mapping=[
+            ButtonSpec(channel=3, byte=1, bit=0),
+            ButtonSpec(channel=3, byte=1, bit=1),
+        ],
+        axis_scale=350.0,
+    ),
     "3Dconnexion Universal Receiver": DeviceSpec(
         name="3Dconnexion Universal Receiver",
         # vendor ID and product ID
@@ -698,6 +719,15 @@ def read_all():
     return [_active_device[i].read() for i in range(len(_active_device))] if _active_device is not None else None
 
 
+def _unique_hid_devices(devices):
+    """One hidraw path can be listed once per HID top-level collection."""
+    seen_paths = set()
+    for device in devices or []:
+        if device.path not in seen_paths:
+            seen_paths.add(device.path)
+            yield device
+
+
 def list_devices():
     """Return a list of the supported devices connected
 
@@ -715,7 +745,7 @@ def list_devices():
     all_hids = hid.find()
 
     if all_hids:
-        for device in all_hids:
+        for device in _unique_hid_devices(all_hids):
             devices.extend(
                 device_name
                 for device_name, spec in device_specs.items()
@@ -783,7 +813,7 @@ def open(
     hid = Enumeration()
     all_hids = hid.find()
     if all_hids:
-        for dev in all_hids:
+        for dev in _unique_hid_devices(all_hids):
             if path:
                 dev.path = path
             spec = device_specs[device]
@@ -1049,4 +1079,3 @@ if __name__ == "__main__":
 
     while True:
         state = dev.read()
-

@@ -1,93 +1,61 @@
-# Berkeley HIL-SERL 复现记录
+# FR3 / HIL-SERL 复现
 
-更新：2026-09-06。当前用户 zwqty；项目 /home/zwqty/hil-serl。
+本目录记录基于官方提交 `c32939bccb65f3b8c43a9f9add3d322d4ab0264a` 的 FR3 硬件适配。Fork 为 [Magiz0r/hil-serl](https://github.com/Magiz0r/hil-serl)，官方项目说明保留在[仓库首页](../README.md)。
 
-## 当前状态
-| 层次 | 结果 |
+## 当前进展
+
+最近一次真机收尾核验：**2026-09-18 17:45 PDT**。SpaceMouse 六轴手动控制已实测，修复 HID 输入积压后，操作者反馈手感可用、速度略慢。用户已要求暂停：当时 PC/NUC 本轮进程均退出，专用容器停止，机器人连接及 ROS 11321 端口释放，Desk 无错误。机器人仍通电，既有 FCI 开关和令牌保留。
+
+| 项目 | 已验证内容 |
 | --- | --- |
-| 安装成功 | Conda hilserl、官方 launcher、robot infra Python 客户端安装成功；pip check 通过 |
-| 基础离线验证通过 | RTX 4090 JAX JIT 1024×1024 矩阵乘；SAC/混合单臂SAC/BC/奖励分类器/agentlace/franka_env 导入；回放缓冲区写入和采样 |
-| 合成训练验证通过 | 官方像素 SAC 一次梯度更新；官方 ResNet10 奖励分类器一次梯度更新（loss 0.8182132244110107） |
-| 真机验证 | 未执行；无机器人服务启动、复位、夹爪或运动命令 |
+| Python / GPU | 独立 Conda `hilserl`，Python 3.10.21，JAX 0.4.35 / jaxlib 0.4.34，RTX 4090 计算通过 |
+| 离线功能 | 51 项单元测试通过；合成 ROS 验证目标发布、停止和断连回收 |
+| 相机 | ZED 2i 外部相机、ZED-M 腕部相机；每路 30 帧，1280×720 单眼图像及 128×128 RGB 转换通过 |
+| 夹爪 | Robotiq 2F-85 USB-RS485 后端已实现，只读 FC03 通信通过；未做真机开合 |
+| 机械臂 | FR3 系统 5.9.2；保持、六轴平移和旋转实测，最后一轮无机器人错误 |
+| 人工输入 | SpaceMouse Wireless BT USB `256f:c63a`；无需按住左键，双键同时按下退出，夹爪禁用 |
+| 训练 | 合成更新通过；尚未采集真实演示、训练真实奖励分类器或运行在线 RL |
 
-合成测试不能证明真实任务收敛、分类器准确率、人工干预或 actor/learner 通信已跑通。ROS1 控制端尚未安装/核验。
+这验证了手动硬件控制入口，尚未验证完整官方演示/actor/learner 流程。首个任务与成功判据仍待确定，GELLO 尚未接入。
 
-## 版本与来源
-- 官方仓库 https://github.com/rail-berkeley/hil-serl
-- 固定 detached HEAD：c32939bccb65f3b8c43a9f9add3d322d4ab0264a。
-- 查阅文件：README.md、serl_robot_infra/README.md、docs/franka_walkthrough.md。
-- Miniconda /home/zwqty/miniconda3；Conda 26.7.1；hilserl Python 3.10.21。
-- 安装器 Miniconda3-py310_26.7.1-1-Linux-x86_64.sh，SHA256 fb1af4c45e6e73fe193c2398b4346b1e45522f729cdfccfdb18f6c765954dbd9，核对 https://repo.anaconda.com/miniconda/ 后安装；安装器已清理。
-- JAX 0.4.35 / jaxlib 0.4.34 / CUDA plugin及PJRT 0.4.35。
-- NumPy 1.26.4 / SciPy 1.11.4 / Flax 0.8.5 / Optax 0.2.3 / Chex 0.1.87。
-- TensorFlow 2.17.1 / TFP 0.24.0 / tf-keras 2.17.0。
-- launcher 0.1.2 / robot infra 0.0.1。
-- agentlace 官方指定 commit cf2c337c5e3694cdbfc14831b239bd657bc4894d。
-- 完整 Python 冻结：pip-freeze.txt；可复用依赖约束：constraints.lock.txt（已将 Conda 构建机 file:// 地址转换成精确包版本，排除本地 editable 项）；Conda 精确包URL：conda-explicit.txt。
-- 预训练参数从本 commit 的 examples/experiments/resnet10_params.pkl 复制到 ~/.serl/resnet10_params.pkl；SHA256 175745d43d30233eb01b5369465d1c24c11b8ee71ccb734cc1c1bca13e07f57b。
+## 目录与入口
 
-## 安装命令与必要差异
+| 路径 | 用途 |
+| --- | --- |
+| [docs/HARDWARE.md](docs/HARDWARE.md) | 当前硬件适配、数据隔离与待完成事项 |
+| [docs/SPACEMOUSE.md](docs/SPACEMOUSE.md) | 官方映射、当前操作方式及实现差异 |
+| [configs/](configs/) | 相机端口配置与已验证的 SpaceMouse 基线快照 |
+| [environment/](environment/) | Python 依赖约束、Conda 锁文件和安装说明 |
+| [nuc/PREFLIGHT.md](nuc/PREFLIGHT.md) | 恢复真机测试前的核对与独立 NUC 部署说明 |
+| [nuc/](nuc/) | ROS1 launch、控制/观测脚本、Dockerfile 和离线 ROS 测试 |
+| [tests/](tests/) | 不连接硬件的单元测试 |
+| [docs/history/](docs/history/) | 安装历史、逐轮硬件记录和旧 VR 参考手册 |
+| `logs/`、`data/`、`runtime/` | 本机证据、数据和运行产物，Git 忽略 |
+
+保留以下已使用的脚本入口：
+
+| 脚本 | 行为 |
+| --- | --- |
+| [install-packages.sh](install-packages.sh) | 在独立 Conda 环境安装依赖 |
+| [offline_smoke.py](offline_smoke.py)、[offline_learning.py](offline_learning.py) | 离线依赖/GPU 与合成学习验证 |
+| [probe_cameras.py](probe_cameras.py) | 只采集相机，默认读取 `configs/cameras.json` |
+| [probe_robotiq_readonly.py](probe_robotiq_readonly.py) | 只读夹爪状态 |
+| [probe_spacemouse.py](probe_spacemouse.py) | 只读 SpaceMouse 输入，不连接机器人 |
+| [spacemouse_upward_trial.py](spacemouse_upward_trial.py) | 显式选择模式后启动真实机械臂控制 |
+
+## 离线复验
+
+在仓库根目录执行，不会启动 ROS 控制器或连接机器人：
+
 ```bash
-bash Miniconda3-py310_26.7.1-1-Linux-x86_64.sh -b -p /home/zwqty/miniconda3
-/home/zwqty/miniconda3/bin/conda create -n hilserl python=3.10 -y --override-channels -c conda-forge
-source /home/zwqty/miniconda3/etc/profile.d/conda.sh
-conda activate hilserl
-python -m pip install --upgrade 'jax[cuda12_pip]==0.4.35' -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-bash /home/zwqty/hil-serl/reproduction/install-packages.sh
+PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python \
+  -m unittest discover -s reproduction/tests -v
 ```
-安装脚本遵循官方顺序：launcher editable → requirements → robot infra editable。当前脚本使用最终完整锁定约束。首次解析使用 constraints.txt 中的兼容候选版本；记录中的安装/修复日志保留于 logs/。
 
-必要差异及依据：
-1. 官方使用 Conda Python3.10；本机也使用 Conda。默认 Anaconda 源触发 CondaToSNonInteractiveError，未接受额外条款，改用 conda-forge，未改全局源配置。
-2. 官方多数 requirements 只有下限，因此通过约束保留 JAX0.4.35 及兼容版本，未修改官方 requirements。
-3. JAX cuda12_pip extra 实际要求 jaxlib0.4.34，不能强行与 JAX 同版本。
-4. 官方命令自动解析的 nvidia-cuda-nvcc-cu12 12.9.86 导致 JAX import 在 Path(cuda_nvcc.__file__) 报 NoneType；固定到12.6.85后 GPU 测试通过。修复命令：`python -m pip install nvidia-cuda-nvcc-cu12==12.6.85`。未改驱动或系统CUDA。
-5. 官方 franka_env 缺少根 __init__.py，find_packages+新版 editable 模式未暴露该模块；使用 `python -m pip install --no-deps --no-build-isolation --config-settings editable_mode=compat -e serl_robot_infra` 修复。未改官方源码；安装脚本已包含兼容模式。
-6. 首次采用的 virtualenv 已按用户指示停止并删除，包括 .venvs/hilserl、.local/share/hilserl-bootstrap、.cache/hilserl-bootstrap、.local/share/virtualenv。旧用户文件未修改、未复用。
+GPU 与合成学习验证、环境重建步骤见 [environment/README.md](environment/README.md)。恢复真机操作时先阅读 [NUC 预检说明](nuc/PREFLIGHT.md)，重新核对当时的现场和服务状态。
 
-## 激活与离线复验
-```bash
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate hilserl
-cd ~/hil-serl
-python -m pip check
-PYTHONDONTWRITEBYTECODE=1 XLA_PYTHON_CLIENT_PREALLOCATE=false python reproduction/offline_smoke.py
-PYTHONDONTWRITEBYTECODE=1 XLA_PYTHON_CLIENT_PREALLOCATE=false python reproduction/offline_learning.py
-```
-GPU 在 Codex 沙箱内不可见，以上测试已通过正常审批在宿主机执行。日志：logs/offline-smoke.log、logs/offline-learning.log。TensorFlow 输出重复 CUDA factory 注册和缺少可选 TensorRT 警告，但测试退出码0、数值断言通过；不宣称 TensorFlow GPU 训练已验证。
-仓库含上游跟踪的 pyc/egg-info；测试/安装生成的这类改动已恢复，官方跟踪源文件未改。以后使用 PYTHONDONTWRITEBYTECODE=1 避免 pyc 噪声。
+## 已保存的可用基线
 
-## 系统与设备核验
-- Ubuntu22.04.5，内核6.8.0-138-generic；62GiB内存；安装前磁盘可用1010GiB。
-- 宿主机 RTX4090 24564MiB，驱动570.211.01，nvidia-smi报告CUDA能力12.8；无需改驱动。
-- 宿主机 zwqty 属于sudo组；沙箱权限映射不同。未执行系统安装或配置变更。
-- /opt/ros/humble存在，不表示ROS1/catkin已配置。
-- 宿主机 USB：ZED2i、ZED-M、ROBOTIS OpenRB-150；未打开相机或发送串口命令，不能据此判断夹爪/干预设备。
-- GitHub、Python包源访问在沙箱内DNS受限，获审批后正常。
-- 旧 /home/franka_desktop/remote_teleop/docs/2026-09-01-serl-vr-teleop-runbook.md 在沙箱内外均无读取权限，尚未读取。
+[configs/SPACEMOUSE_BASELINE.json](configs/SPACEMOUSE_BASELINE.json) 保存了动作尺度、阻抗参数、源文件 SHA256、镜像摘要和最后一轮结果。最后一轮最大 TCP 位移 105.820 mm、转角 12.532°，峰值实测 TCP 速度约 48.09 mm/s，最低控制命令成功率 1.0；由操作者双键正常结束。
 
-## 未解决及下一阶段
-需要用户补充：NUC IP/SSH用户名和可用认证方式及只读检查授权；FR3固件/系统版本及现有服务状态；实际夹爪和干预设备；两台相机的角色；首个任务及成功判据；可读旧runbook副本（无需发送密码）。
-训练端现已就绪供进一步离线开发；控制端必须根据NUC系统、libfranka、franka_ros和固件版本选择ROS1部署，不能以Humble直接替换。未启动任何服务。
-官方默认RealSense/SpaceMouse；当前检测到ZED，待确认任务视角与输入设备后做最小接口适配，记录来源和差异。现在不套用默认序列号、位姿或动作范围。
-官方RAM流程：奖励正负样本 → 奖励分类器 → 成功演示 → actor/learner → SpaceMouse干预 → checkpoint评估。具体启动命令待真实配置审阅后生成；franka_server、record_demos和actor均可能触发控制器/动作/复位，必须先说明并取得动作批准。
-
-## Fork 与开发分支
-2026-09-06：origin 已关联 https://github.com/Magiz0r/hil-serl.git；upstream 保留 https://github.com/rail-berkeley/hil-serl.git。Fork 的 main 与上述官方固定 commit 一致。本地适配分支 fr3-reproduction 从该 commit 创建。
-新增 .gitignore 排除安装日志、机器相关原始 pip freeze、Python 构建产物及常见演示/分类器数据/checkpoint 目录；准确可移植版本保存在 constraints.lock.txt 和 conda-explicit.txt。原始日志仍留本机用于排查。此步骤未推送远程。
-
-## 2026-09-07 基础硬件推进
-SSH已接通并完成NUC只读核验，旧runbook已读取；详见[HARDWARE.md](HARDWARE.md)，其中更新了上文待补信息。
-新增可选ZED UVC后端、相机配置与相机专用探测脚本，4项离线契约测试通过。相机尚受设备ACL限制，SpaceMouse尚未连接，夹爪通信尚未验证。未启动机器人或变更现有部署。本轮修改尚未提交/推送。
-
-## 2026-09-08 相机实采结果
-新用户设备权限已生效；ZED2i外部、ZED-M腕部均成功读取30帧，1280×720单眼BGR→128×128 RGB转换通过，并已检查本地预览。详细结果及限制见HARDWARE.md最新段落。下一项是Robotiq连接方式和FR3固件核验，SpaceMouse待插入；机器人动作仍未授权或执行。
-
-## 2026-09-18 状态复核
-见HARDWARE.md最新记录。发现当前DROID服务运行、两台ZED2i的by-id名称冲突以及相机临时ACL失效；未启动控制或重新采图。旧DROID配置确认Robotiq使用ttyUSB0串口。4项离线测试仍通过；真实夹爪通信及FR3固件待核验。
-2026-09-18后续：原外部相机改用USB端口路径，权限恢复后两路各30帧实采通过，预览已核验。未打开第二台ZED2i，未执行机器人动作。
-2026-09-18补充：通过机器人Desk/Admin只读接口已自动读取FR3系统版本5.9.2，无需用户手工提供；未启动FCI。具体响应和来源见HARDWARE.md。
-2026-09-18继续：FR3系统5.9.2满足libfranka0.18.1官方版本下限；Robotiq独立FC03状态读成功，CRC校验通过，但返回通信超时故障0x09。没有执行清错、激活或运动。协议测试新增3项，共8项离线测试通过；详见HARDWARE.md。完整RS485动作后端和独立控制端部署尚未完成。
-
-后续连续只读查询使Robotiq故障码从0x09恢复为0x00，无控制写入。已实现构造只读的RS485后端并接入`--gripper_type=RobotiqRS485`；13项离线测试通过。NUC独立镜像`hil-serl-fr3:2026-09-18`离线构建成功，无网络/无设备临时容器导入验证通过；未创建持久容器或启动server。准确镜像ID、wheel哈希与边界见HARDWARE.md及reproduction/nuc/。
-最终只读 `docker ps -a` 未发现 `rteleop-droid-nuc`；现有历史容器状态已记录于HARDWARE.md。本轮未停止、删除或重建任何原有容器。真机前需重新确认当前控制服务归属，不能沿用旧DROID运行状态假设。
+原始日志仅保留在本机 `reproduction/logs/` 和 NUC 专用运行目录，未上传 GitHub。历史记录按当时事实归档，不能把其中旧的“未启动”或“正在运行”描述当作当前状态。

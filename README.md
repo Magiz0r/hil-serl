@@ -1,5 +1,7 @@
 # HIL-SERL: Precise and Dexterous Robotic Manipulation via Human-in-the-Loop Reinforcement Learning
 
+> **FR3 hardware reproduction in this fork:** [setup, current status, and isolated hardware tests](reproduction/README.md). Includes ZED UVC, Robotiq RS485, and SpaceMouse Wireless BT adaptations. Full real-world HIL-SERL training has not yet been validated.
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Static Badge](https://img.shields.io/badge/Project-Page-a)](https://hil-serl.github.io/)
 [![Discord](https://img.shields.io/discord/1302866684612444190?label=Join%20Us%20on%20Discord&logo=discord&color=7289da)](https://discord.gg/G4xPJEhwuC)
@@ -105,4 +107,3 @@ If you use this code for your research, please cite our paper:
       primaryClass={cs.RO}
 }
 ```
-

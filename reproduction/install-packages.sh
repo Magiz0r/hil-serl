@@ -3,7 +3,7 @@ set -euo pipefail
 source /home/zwqty/miniconda3/etc/profile.d/conda.sh
 conda activate hilserl
 cd /home/zwqty/hil-serl
-export PIP_CONSTRAINT=/home/zwqty/hil-serl/reproduction/constraints.lock.txt
+export PIP_CONSTRAINT=/home/zwqty/hil-serl/reproduction/environment/constraints.lock.txt
 cd serl_launcher
 python -m pip install --no-build-isolation --config-settings editable_mode=compat -e .
 python -m pip install -r requirements.txt
@@ -12,4 +12,4 @@ python -m pip install --no-build-isolation --config-settings editable_mode=compa
 python -m pip install 'pytest==8.3.5'
 python -m pip check
 python -m pip freeze --all > ../reproduction/pip-freeze.txt
-conda list --explicit > ../reproduction/conda-explicit.txt
+conda list --explicit > ../reproduction/environment/conda-explicit.txt

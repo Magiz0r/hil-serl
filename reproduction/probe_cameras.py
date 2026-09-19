@@ -8,7 +8,7 @@ from franka_env.camera.zed_uvc_capture import ZEDUVCCapture
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, default=Path(__file__).with_name('cameras.json'))
+    parser.add_argument('--config', type=Path, default=Path(__file__).parent / 'configs' / 'cameras.json')
     parser.add_argument('--frames', type=int, default=30)
     parser.add_argument('--preview-dir', type=Path, help='Optionally save last single-eye frames locally')
     args = parser.parse_args()

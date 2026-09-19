@@ -1,0 +1,97 @@
+{
+  "recorded_at_utc": "2026-09-19T00:46:31.909635+00:00",
+  "status": "paused_by_user_all_hil_serl_control_stopped",
+  "upstream_commit": "c32939bccb65f3b8c43a9f9add3d322d4ab0264a",
+  "workspace_head": "fda11334e2d0389890e8de3a82e100217ea361b8",
+  "image": "sha256:d56016766146580ba8e7e2e0d4fa191a7f902ec8dc54a7ae06387cb1d9a7f151",
+  "entrypoint": "reproduction/spacemouse_upward_trial.py",
+  "arguments": [
+    "--execute-attended-manual",
+    "--no-trial-bounds",
+    "--official-input"
+  ],
+  "input": {
+    "axes": [
+      "-y",
+      "x",
+      "z",
+      "-roll",
+      "-pitch",
+      "-yaw"
+    ],
+    "frame": "robot_base",
+    "hid_read": "drain_nonblocking_queue_then_send_latest",
+    "stop": "both_buttons_latched",
+    "gripper_enabled": false
+  },
+  "response_profile": "ram_measured_step",
+  "action_hz": 10,
+  "position_action_scale_m": 0.01,
+  "rotation_action_scale_rad": 0.06,
+  "compliance": {
+    "translational_stiffness": 2000.0,
+    "translational_damping": 89.0,
+    "rotational_stiffness": 150.0,
+    "rotational_damping": 7.0,
+    "nullspace_stiffness": 0.2,
+    "joint1_nullspace_stiffness": 10.0,
+    "translational_clip_neg_x": 0.005,
+    "translational_clip_neg_y": 0.005,
+    "translational_clip_neg_z": 0.005,
+    "translational_clip_x": 0.005,
+    "translational_clip_y": 0.005,
+    "translational_clip_z": 0.005,
+    "rotational_clip_neg_x": 0.03,
+    "rotational_clip_neg_y": 0.03,
+    "rotational_clip_neg_z": 0.03,
+    "rotational_clip_x": 0.03,
+    "rotational_clip_y": 0.03,
+    "rotational_clip_z": 0.03,
+    "translational_Ki": 0.0,
+    "rotational_Ki": 0.0
+  },
+  "diagnostic_checks": {
+    "predicted_joint_speed_rad_s": 0.4,
+    "observed_joint_speed_rad_s": 0.6,
+    "position_tracking_error_m": 0.025,
+    "rotation_tracking_error_rad": 0.12,
+    "input_state_max_age_s": 0.2
+  },
+  "workspace_box": null,
+  "session_timeout_s": null,
+  "feedback": "这把不错，还可以，虽然动的速度有点慢",
+  "remaining": "Speed could be tuned separately; no real demos, reward training or online RL verified.",
+  "offline_tests_passed": 51,
+  "last_run": "manual-20260919T004139Z-8",
+  "result_metrics": {
+    "records": 2760,
+    "max_tcp_displacement_mm": 105.81980081688548,
+    "max_rotation_deg": 12.532209174059346,
+    "peak_measured_tcp_speed_mm_s": 48.09145366896989,
+    "max_abs_joint_velocity_rad_s": 0.15424838662147522,
+    "minimum_success": 1.0,
+    "robot_error_samples": 0
+  },
+  "shutdown": {
+    "pc_input_processes": 0,
+    "nuc_runtime_processes": 0,
+    "own_container_running": false,
+    "robot_connections": 0,
+    "ros_port_11321": "free",
+    "robot_power": "On",
+    "desk_fci_enabled": true,
+    "other_containers_unchanged": true
+  },
+  "source_sha256": {
+    "reproduction/spacemouse_upward_trial.py": "c24e7575ef86103c629afed6573c976bcfe2de5a41ebd71ad4843796240f9bd7",
+    "serl_robot_infra/franka_env/spacemouse/pyspacemouse.py": "dbeb5e54d37286ee5d78d5cf96a2590c1b70efbc1dc248e6d5cd1f0100435b25",
+    "reproduction/nuc/fr3_hold.launch": "51f721a2eae79beb03d3383f941fd5314e6900c0e370ecbadaf78e515a7d8eda",
+    "reproduction/nuc/fr3_kinematics.py": "5748240ec9b9b74047b802271e3d4b61c0dc4a64891f5b56115def2a7e7da2da",
+    "reproduction/nuc/hold_container.json": "d1867d637faf82362c2e7033b47e58918cc9b381fc6f09acb2a2cb837bb52a06",
+    "reproduction/nuc/launch_hold.sh": "2b15e372df5ccb694e92b4d58bf0f320bf14fb33d513b2d65002e67110d76669",
+    "reproduction/nuc/manual_guard.py": "e35bb9d8c238f6864feaa8929f6f3c35e8afd2bb2bff3e8fdf5129463b48bbe3",
+    "reproduction/nuc/run_upward_trial.py": "2b301041de5955ea163fda0e4d5d176ea39edb89b4d30a48968028787b35b094",
+    "reproduction/nuc/translation_guard.py": "26d94e53b44d006ba28dfaba411405a900e0d0f77402de0581f291e285fa04f0",
+    "reproduction/nuc/upward_trial.py": "4be6e97478096d69ad44ee73693d18fe5e0f5c5805cc8071ec80e6f5e8024ad9"
+  }
+}

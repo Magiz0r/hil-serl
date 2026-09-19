@@ -6,9 +6,13 @@ __pycache__/
 .env
 .env.*
 !.env.example
+/.vscode/
+.pytest_cache/
 
 # Machine-local installation evidence; portable locks are tracked
 /reproduction/logs/
+/reproduction/data/
+/reproduction/runtime/
 /reproduction/pip-freeze.txt
 /reproduction/nuc/wheels/
 

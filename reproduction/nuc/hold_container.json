@@ -1,0 +1,36 @@
+{
+  "name": "hil-serl-fr3-hold-20260918",
+  "image": "sha256:d56016766146580ba8e7e2e0d4fa191a7f902ec8dc54a7ae06387cb1d9a7f151",
+  "runtime_root": "/home/tasl/hil_serl_runtime_20260918",
+  "command": ["sleep", "infinity"],
+  "environment": {
+    "HOME": "/hil-serl-state/home",
+    "ROS_HOME": "/hil-serl-state/ros",
+    "ROS_LOG_DIR": "/hil-serl-state/logs/ros",
+    "ROS_MASTER_URI": "http://127.0.0.1:11321",
+    "ROS_IP": "127.0.0.1",
+    "XDG_CACHE_HOME": "/hil-serl-state/cache",
+    "HF_HOME": "/hil-serl-state/cache/huggingface",
+    "UV_CACHE_DIR": "/hil-serl-state/cache/uv",
+    "UV_PYTHON_INSTALL_DIR": "/hil-serl-state/cache/uv-python",
+    "WANDB_DIR": "/hil-serl-state/wandb",
+    "WANDB_CACHE_DIR": "/hil-serl-state/cache/wandb",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "TMPDIR": "/tmp"
+  },
+  "readonly_rootfs": true,
+  "network_mode": "host",
+  "cap_drop": ["ALL"],
+  "cap_add": ["SYS_NICE", "IPC_LOCK"],
+  "supplementary_group": "1000",
+  "devices": [],
+  "restart_policy": "no",
+  "tmpfs": {
+    "/tmp": "rw,nosuid,nodev,size=268435456,mode=1777",
+    "/run": "rw,nosuid,nodev,size=16777216,mode=755"
+  },
+  "mounts": [
+    {"relative_source": "source", "target": "/opt/hil-serl-preflight", "readonly": true},
+    {"relative_source": "state", "target": "/hil-serl-state", "readonly": false}
+  ]
+}
