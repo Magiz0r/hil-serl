@@ -6,9 +6,8 @@
 | --- | --- |
 | [constraints.lock.txt](constraints.lock.txt) | 当前 pip 安装所用的固定版本约束 |
 | [conda-explicit.txt](conda-explicit.txt) | 已验证 Linux 环境的 Conda 显式包列表 |
-| [constraints.txt](constraints.txt) | 初次安装的候选约束，保留用于追溯 |
 
-在本机安装依赖的入口仍为仓库根目录下的 `bash reproduction/install-packages.sh`。脚本只面向上述 Conda 环境，安装官方包时使用 `constraints.lock.txt`，原始 `pip freeze` 输出仍保留为被 Git 忽略的 `reproduction/pip-freeze.txt`。新机器应先建立合适的独立环境并审阅脚本中的本机路径。
+在本机安装依赖的入口仍为仓库根目录下的 `bash reproduction/install-packages.sh`。脚本只面向上述 Conda 环境，安装官方包时使用 `constraints.lock.txt`，安装结束会生成被 Git 忽略的本机快照 `reproduction/pip-freeze.txt`。该快照可清理，可复用版本以锁文件为准。初次安装的候选约束 `constraints.txt` 已被锁文件替代并移除，需要追溯时可查 Git 历史。新机器应先建立合适的独立环境并审阅脚本中的本机路径。
 
 只做离线复验时：
 

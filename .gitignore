@@ -1,4 +1,4 @@
-# Local Python build artifacts (upstream-tracked files remain tracked)
+# Generated Python artifacts stay local, including editable-install metadata
 __pycache__/
 *.py[cod]
 *.egg-info/
