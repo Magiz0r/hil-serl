@@ -178,9 +178,10 @@ class ManualGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'operator stop'):
             self.guard.step(self.packet(stop=True), 1.01, .02)
 
-    def official_guard(self):
+    def official_guard(self, speed_scale=1., translation_scale=None, rotation_scale=None):
         self.guard = ManualGuard(self.sample, [-1.] * 7, [1.] * 7,
-                                 trial_bounds=False, official_input=True)
+                                 trial_bounds=False, official_input=True,
+                                 speed_scale=speed_scale, translation_scale=translation_scale, rotation_scale=rotation_scale)
         self.guard.check_state(self.sample, 1.01, self.jacobian)
         self.guard.step(self.packet(), 1.01, .02)
 
@@ -234,14 +235,114 @@ class ManualGuardTests(unittest.TestCase):
         self.assertGreater(self.guard.target_rotation.as_rotvec()[0], 0)
 
     def test_responsive_state_checks_reject_faults_and_excessive_motion(self):
-        self.official_guard()
-        for changes in [dict(dq=[.61] * 7), dict(xyz=[.326, 0, .5]),
-                        dict(current_errors=['fault']), dict(received_at=0.),
-                        dict(rotation=Rotation.from_rotvec([.13, 0, 0]).as_matrix().flatten(order='F').tolist())]:
-            sample = copy.deepcopy(self.sample)
-            sample.update(changes)
-            with self.subTest(changes=changes), self.assertRaises(ValueError):
-                self.guard.check_state(sample, 1.01, self.jacobian)
+        for speed_scale in (1., 1.5, 2.):
+            self.official_guard(speed_scale)
+            for changes in [dict(dq=[.61] * 7), dict(xyz=[.326, 0, .5]),
+                            dict(current_errors=['fault']), dict(received_at=0.),
+                            dict(rotation=Rotation.from_rotvec([.13, 0, 0]).as_matrix().flatten(order='F').tolist())]:
+                sample = copy.deepcopy(self.sample)
+                sample.update(changes)
+                with self.subTest(scale=speed_scale, changes=changes), self.assertRaises(ValueError):
+                    self.guard.check_state(sample, 1.01, self.jacobian)
+
+    def test_scaled_input_changes_response_without_accumulating_or_changing_rate(self):
+        for speed_scale in (1., 1.5, 2.):
+            self.official_guard(speed_scale)
+            for _ in range(100):
+                self.guard.step(self.packet((.2, 0, 0, 0, 0, .2)), 1.01, .02)
+            self.assertAlmostEqual(self.guard.target[0], .3 + .002 * speed_scale)
+            self.assertAlmostEqual(self.guard.target_rotation.magnitude(), .012 * speed_scale)
+            self.guard.step(self.packet(), 1.01, .02)
+            self.assertAlmostEqual(self.guard.target[0], .3)
+            self.guard.step(self.packet((1, 0, 0, 0, 0, 0)), 1.01, .02)
+            self.follow()
+            for _ in range(4):
+                self.guard.step(self.packet((1, 0, 0, 0, 0, 0)), 1.01, .02)
+            self.assertAlmostEqual(self.guard.target[0], .3 + .01 * speed_scale)
+            self.guard.step(self.packet((1, 0, 0, 0, 0, 0)), 1.01, .02)
+            self.assertAlmostEqual(self.guard.target[0], .3 + .02 * speed_scale)
+
+    def test_scaled_combined_input_respects_tracking_and_joint_prediction(self):
+        for jacobian_scale in (.1, 1., 10.):
+            self.official_guard(2.)
+            jacobian = self.jacobian * jacobian_scale
+            self.guard.check_state(self.sample, 1.01, jacobian)
+            self.guard.step(self.packet((1,) * 6), 1.01, .02)
+            translation = self.guard.target - self.guard.measured
+            rotation = self.guard.target_rotation.as_rotvec()
+            self.assertLessEqual(np.linalg.norm(translation), .020 + 1e-10)
+            self.assertLessEqual(np.linalg.norm(rotation), .10 + 1e-10)
+            self.assertLessEqual(np.max(np.abs(np.linalg.pinv(jacobian) @ np.r_[translation, rotation])), .04 + 1e-10)
+            self.guard.check_state(self.sample, 1.01, jacobian)
+        self.sample['q'][3] = -.999
+        self.official_guard(2.)
+        self.guard.step(self.packet((0, 0, 0, -1, 0, 0)), 1.01, .02)
+        self.assertAlmostEqual(self.guard.target_rotation.magnitude(), 0)
+        for _ in range(5):
+            self.guard.step(self.packet((0, 0, 0, 1, 0, 0)), 1.01, .02)
+        self.assertGreater(self.guard.target_rotation.as_rotvec()[0], 0)
+
+    def test_scaled_input_rejects_invalid_values_and_other_modes(self):
+        for value in (0, 3, True, float('nan'), '2'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.official_guard(value)
+        for options in ({}, {'trial_bounds': False}, {'official_input': True}):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                ManualGuard(self.sample, [-1.] * 7, [1.] * 7, speed_scale=2., **options)
+
+    def test_translation_override_reduces_translation_and_preserves_rotation(self):
+        for axes in ((.2, 0, 0, 0, 0, .2), (1, 0, 0, 0, 0, 0), (0, 0, 0, 0, 0, 1)):
+            self.official_guard(2.)
+            self.guard.step(self.packet(axes), 1.01, .02)
+            original_xyz = self.guard.target - self.guard.measured
+            original_rotation = self.guard.target_rotation.as_rotvec()
+            self.official_guard(2., translation_scale=1.6)
+            for _ in range(100):
+                self.guard.step(self.packet(axes), 1.01, .02)
+            np.testing.assert_allclose(self.guard.target - self.guard.measured, .8 * original_xyz)
+            np.testing.assert_allclose(self.guard.target_rotation.as_rotvec(), original_rotation)
+            self.guard.check_state(self.sample, 1.01, self.jacobian)
+            self.guard.step(self.packet(), 1.01, .02)
+            np.testing.assert_allclose(self.guard.target, self.sample['xyz'])
+            self.assertAlmostEqual(self.guard.target_rotation.magnitude(), 0)
+        for value in (0, 3, True, float('nan'), '1.6'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.official_guard(2., translation_scale=value)
+        for options in ({}, {'trial_bounds': False}, {'official_input': True}):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                ManualGuard(self.sample, [-1.] * 7, [1.] * 7, translation_scale=1.6, **options)
+
+    def test_faster_rotation_preserves_translation_and_increases_small_and_full_input(self):
+        for axes in ((1,0,0,0,0,0),(0,0,0,0,0,.2),(0,0,0,0,0,1)):
+            self.official_guard(2.,translation_scale=1.6)
+            self.guard.step(self.packet(axes),1.01,.02)
+            old_position=self.guard.target.copy();old_angle=self.guard.target_rotation.magnitude()
+            self.official_guard(2.,translation_scale=1.6,rotation_scale=3.)
+            self.guard.step(self.packet(axes),1.01,.02)
+            np.testing.assert_allclose(self.guard.target,old_position)
+            if axes[-1]:
+                self.assertAlmostEqual(self.guard.target_rotation.magnitude()/old_angle,1.5 if axes[-1]==.2 else 1.375)
+            self.guard.step(self.packet(),1.01,.02)
+            np.testing.assert_allclose(self.guard.target,self.sample['xyz'])
+            self.assertAlmostEqual(self.guard.target_rotation.magnitude(),0)
+
+    def test_faster_rotation_retains_tracking_state_and_stop_checks(self):
+        for size in (.1,1.,10.):
+            self.official_guard(2.,translation_scale=1.6,rotation_scale=3.)
+            jacobian=self.jacobian*size
+            self.guard.check_state(self.sample,1.01,jacobian)
+            self.guard.step(self.packet((1,)*6),1.01,.02)
+            translation=self.guard.target-self.guard.measured
+            rotation=self.guard.target_rotation.as_rotvec()
+            self.assertLessEqual(np.linalg.norm(translation),.020+1e-10)
+            self.assertLessEqual(np.linalg.norm(rotation),.10+1e-10)
+            self.assertLessEqual(np.max(np.abs(np.linalg.pinv(jacobian)@np.r_[translation,rotation])),.055+1e-10)
+            self.assertLessEqual(np.max(np.abs(np.linalg.pinv(jacobian)@np.r_[translation,[0.]*3])),.04+1e-10)
+            for changes in (dict(dq=[.61]*7),dict(mode=4),dict(current_errors=['fault']),dict(received_at=0.)):
+                with self.assertRaises(ValueError):self.guard.check_state(dict(self.sample,**changes),1.01,jacobian)
+            with self.assertRaisesRegex(ValueError,'operator stop'):self.guard.step(self.packet(stop=True),1.01,.02)
+        for value in (0,4,True,float('nan'),'3'):
+            with self.assertRaises(ValueError):self.official_guard(rotation_scale=value)
 
 
 if __name__ == '__main__':

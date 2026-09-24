@@ -1,0 +1,30 @@
+{
+  "name": "block_into_cup",
+  "version": 1,
+  "stage": "manual_pilot",
+  "success_definition": "Block remains inside the cup after the gripper releases it and withdraws.",
+  "sequence": [
+    "grasp block",
+    "lift",
+    "position over cup",
+    "lower and release",
+    "withdraw gripper"
+  ],
+  "reset": "Operator-clicked DROID joint Home after Finish; manually replace objects; no automatic gripper movement.",
+  "operator_confirmed_block_fits_cup": true,
+  "pilot_placement": "fixed cup and fixed block start position for the first two or three episodes",
+  "later_demonstration_placement": "keep cup fixed; introduce small block position and orientation changes only after pilot review",
+  "cup_material": null,
+  "block_dimensions_mm": null,
+  "cup_opening_mm": null,
+  "trial_goal": "three short pilot episodes; inspect image visibility, timestamps, and labels before collecting a full demonstration set",
+  "home_joint_degrees": [
+    0,
+    -36,
+    0,
+    -144,
+    0,
+    108,
+    0
+  ]
+}

@@ -8,6 +8,14 @@ __pycache__/
 !.env.example
 /.vscode/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+/htmlcov/
+.DS_Store
+/.agents/
+/.codex/
 
 # Machine-local installation evidence; portable locks are tracked
 /reproduction/logs/
@@ -15,6 +23,9 @@ __pycache__/
 /reproduction/runtime/
 /reproduction/pip-freeze.txt
 /reproduction/nuc/wheels/
+/reproduction/nuc/build/
+/reproduction/nuc/devel/
+/reproduction/nuc/install/
 
 # Generated experiment data and checkpoints
 wandb/

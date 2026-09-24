@@ -28,7 +28,9 @@ class ZEDUVCCapture:
         if not device.startswith(('/dev/v4l/by-id/', '/dev/v4l/by-path/')):
             raise ValueError("Use /dev/v4l/by-id/ or /dev/v4l/by-path/, not a camera index")
         if not os.access(device, os.R_OK | os.W_OK):
-            raise PermissionError(f"Camera missing or inaccessible: {device}")
+            if not os.path.exists(device):
+                raise FileNotFoundError(f"Camera device not found: {device}")
+            raise PermissionError(f"Camera permission denied (read/write): {device}")
         self.name, self.eye = name, eye
         self.cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
         if not self.cap.isOpened():

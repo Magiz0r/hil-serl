@@ -6,6 +6,8 @@
 | --- | --- |
 | [SETUP-2026-09.md](SETUP-2026-09.md) | Conda、GPU、依赖及早期适配经过 |
 | [HARDWARE-2026-09.md](HARDWARE-2026-09.md) | 相机、夹爪、NUC 和真机进展的逐次记录 |
+| [HARDWARE-2026-09-18.md](HARDWARE-2026-09-18.md) | 早期硬件总览快照；当时尚未验证的夹爪和采集能力后来已有更新 |
+| [PILOT_CAPTURE-2026-09.md](PILOT_CAPTURE-2026-09.md) | 方块入杯实例、分步启动和旧版 Finish 页面；当前流程见 Capture Console |
 | [PREFLIGHT-2026-09-18.md](PREFLIGHT-2026-09-18.md) | 各轮控制参数、失败原因、结果与隔离核验 |
 | [SPACEMOUSE-2026-09-18.md](SPACEMOUSE-2026-09-18.md) | 官方映射审阅与诊断入口演进 |
 | [SERL-VR-2026-09-01.md](SERL-VR-2026-09-01.md) | 用户提供的旧 VR 参考手册，保留内容并标明旧项目链接；不属于本轮可直接启动的部署 |

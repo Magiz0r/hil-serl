@@ -1,0 +1,16 @@
+{
+  "image": "sha256:d56016766146580ba8e7e2e0d4fa191a7f902ec8dc54a7ae06387cb1d9a7f151",
+  "changes": {
+    "rotation_controller.cpp": {
+      "base_path": "/opt/venv/franka-0.18.0/franka_catkin_ws/src/serl_franka_controllers/src/cartesian_impedance_controller.cpp",
+      "base_sha256": "27d50cf27df98882cec04d5d68989673392be7d656b479839c35482453e7f044",
+      "sha256": "45d153898775ef32ba42392916b5c0d3629545a9c127f22b97308a1245771b9c"
+    },
+    "rotation_controller.h": {
+      "base_path": "/opt/venv/franka-0.18.0/franka_catkin_ws/src/serl_franka_controllers/include/serl_franka_controllers/cartesian_impedance_controller.h",
+      "base_sha256": "330212d9a83b58dddaad2697594d3f64e11ba4172f66c16ebf353cfa6fc952a2",
+      "sha256": "6bcb1e6b9db2fed85936dadf5e098724a1cec48882fca3553845400e9a81bda9"
+    }
+  },
+  "description": "Existing image Cartesian controller under a separate class/library; only orientation slerp coefficient changes from 0.005 to 0.02. Translation, gains, torque limiting, error clips and all other behavior retain original code."
+}

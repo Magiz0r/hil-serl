@@ -5,6 +5,7 @@
        franka_control also writes the image's collision_config on connection.
        Use only the pinned image documented in PREFLIGHT.md. -->
   <arg name="robot_ip" default="172.16.0.1" />
+  <arg name="cartesian_controller_type" default="serl_franka_controllers/CartesianImpedanceController" />
 
   <!-- Keep historical clients' usual target topic outside this hold test. -->
   <remap from="/cartesian_impedance_controller/equilibrium_pose"
@@ -19,11 +20,11 @@
 
   <!-- Do not load the historical SERL YAML, which hard-codes panda joints. -->
   <rosparam ns="cartesian_impedance_controller">
-    type: serl_franka_controllers/CartesianImpedanceController
     arm_id: fr3
     joint_names: [fr3_joint1, fr3_joint2, fr3_joint3, fr3_joint4,
                   fr3_joint5, fr3_joint6, fr3_joint7]
   </rosparam>
+  <param name="cartesian_impedance_controller/type" value="$(arg cartesian_controller_type)" />
   <node name="hil_serl_hold_spawner" pkg="controller_manager" type="spawner"
         args="cartesian_impedance_controller" output="screen"
         respawn="false" required="true" />

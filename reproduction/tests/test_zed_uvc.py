@@ -27,8 +27,15 @@ class StereoContract(unittest.TestCase):
             camera.close()
             capture.return_value.release.assert_called_once()
         with patch('franka_env.camera.zed_uvc_capture.os.access', return_value=False), \
+             patch('franka_env.camera.zed_uvc_capture.os.path.exists', return_value=True), \
              patch('franka_env.camera.zed_uvc_capture.cv2.VideoCapture') as capture:
-            with self.assertRaises(PermissionError):
+            with self.assertRaisesRegex(PermissionError, 'permission denied'):
+                ZEDUVCCapture('external', device)
+            capture.assert_not_called()
+        with patch('franka_env.camera.zed_uvc_capture.os.access', return_value=False), \
+             patch('franka_env.camera.zed_uvc_capture.os.path.exists', return_value=False), \
+             patch('franka_env.camera.zed_uvc_capture.cv2.VideoCapture') as capture:
+            with self.assertRaisesRegex(FileNotFoundError, 'not found'):
                 ZEDUVCCapture('external', device)
             capture.assert_not_called()
 

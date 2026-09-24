@@ -19,7 +19,7 @@ def main():
     launch = Path(sys.argv[1])
     cfg = roslaunch.config.ROSLaunchConfig()
     roslaunch.xmlloader.XmlLoader().load(
-        str(launch), cfg, argv=["robot_ip:=172.16.0.1"], verbose=False
+        str(launch), cfg, argv=["robot_ip:=172.16.0.1"]+sys.argv[2:], verbose=False
     )
     params = {key: value.value for key, value in cfg.params.items()}
     joints = ["fr3_joint" + str(i) for i in range(1, 8)]
@@ -31,6 +31,9 @@ def main():
         assert params[namespace + "/arm_id"] == "fr3", namespace
         assert params[namespace + "/joint_names"] == joints, namespace
     assert params["/franka_control/robot_ip"] == "172.16.0.1"
+    assert params['/cartesian_impedance_controller/type'] in (
+        'serl_franka_controllers/CartesianImpedanceController',
+        'hil_serl_rotation/ResponsiveCartesianImpedanceController')
 
     urdf = ET.fromstring(params["/robot_description"])
     urdf_joints = {joint.attrib["name"] for joint in urdf.findall("joint")}

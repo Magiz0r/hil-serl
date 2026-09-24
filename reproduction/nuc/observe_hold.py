@@ -38,6 +38,7 @@ def sample_from_message(message, received_at):
         "xyz": transform[12:15],
         "rotation": [transform[i] for i in (0, 1, 2, 4, 5, 6, 8, 9, 10)],
         "q": vector(message, "q", 7),
+        "q_d": vector(message, "q_d", 7) if hasattr(message, "q_d") else None,
         "dq": vector(message, "dq", 7),
         "tau": vector(message, "tau_J", 7),
         "success": success,

@@ -29,7 +29,26 @@ def normalized_input(values, deadzone=DEADZONE):
 
 
 class ManualGuard:
-    def __init__(self, sample, lower, upper, *, trial_bounds=True, official_input=False):
+    def __init__(self, sample, lower, upper, *, trial_bounds=True, official_input=False,
+                 speed_scale=1.0, translation_scale=None, rotation_scale=None):
+        if type(speed_scale) not in (int, float) or speed_scale not in (1., 1.5, 2.):
+            raise ValueError('speed_scale must be 1, 1.5 or 2')
+        if speed_scale != 1. and (trial_bounds or not official_input):
+            raise ValueError('speed scaling requires official manual input without trial bounds')
+        if translation_scale is not None:
+            if type(translation_scale) not in (int, float) or translation_scale not in (1., 1.5, 1.6, 2.):
+                raise ValueError('translation_scale must be 1, 1.5, 1.6 or 2')
+            if trial_bounds or not official_input:
+                raise ValueError('translation scaling requires official manual input without trial bounds')
+        self.speed_scale = speed_scale
+        self.translation_scale = speed_scale if translation_scale is None else translation_scale
+        if rotation_scale is not None:
+            if type(rotation_scale) not in (int,float) or rotation_scale not in (1.,1.5,2.,3.):
+                raise ValueError('rotation_scale must be 1, 1.5, 2 or 3')
+            if trial_bounds or not official_input:
+                raise ValueError('rotation scaling requires official manual input without trial bounds')
+        self.rotation_scale = speed_scale if rotation_scale is None else rotation_scale
+        self.rotation_joint_speed = .55 if self.rotation_scale > 2 else ACTION_JOINT_SPEED
         self.trial_bounds = trial_bounds
         self.official_input = official_input
         check_joints(sample['q'], lower, upper, 0.10 if trial_bounds else 0.,
@@ -57,7 +76,8 @@ class ManualGuard:
         if not math.isfinite(age) or not 0 <= age <= MAX_AGE:
             raise ValueError('robot state stale')
         if sample['mode'] != 2 or sample['current_errors'] or sample['last_motion_errors']:
-            raise ValueError('robot mode or error changed')
+            raise ValueError('robot mode or error changed: mode=%r current_errors=%r last_motion_errors=%r' %
+                             (sample['mode'], sample['current_errors'], sample['last_motion_errors']))
         check_joints(sample['q'], self.lower, self.upper, 0.025 if self.trial_bounds else 0.,
                      0.0008 if self.trial_bounds else 0.)
         if max(abs(v) for v in vector(sample['dq'], 7)) > (0.6 if self.official_input else 0.15):
@@ -168,7 +188,7 @@ class ManualGuard:
     def measured_step(self, axes, neutral, dt):
         """Follow fresh measured-pose increments without accumulating old commands.
 
-        Uses the upstream RAM action scale and period. Neutral captures the
+        Uses the upstream RAM period and explicitly selectable action scale. Neutral captures the
         measured pose once for diagnostic holding (there is no policy fallback).
         The existing robot/URDF limits and local joint prediction still apply.
         """
@@ -184,11 +204,22 @@ class ManualGuard:
             return self.pose()
         self.active_input = True
         self.action_elapsed = 0.
-        translation = axes[:3] * POSITION_ACTION_SCALE
-        rotation_step = axes[3:] * ROTATION_ACTION_SCALE
+        translation = axes[:3] * POSITION_ACTION_SCALE * self.translation_scale
+        rotation_step = axes[3:] * ROTATION_ACTION_SCALE * self.rotation_scale
         joint_delta = self.inverse_jacobian @ np.r_[translation, rotation_step]
-        scale = min(1., ACTION_JOINT_SPEED * ACTION_PERIOD /
+        joint_budget = self.rotation_joint_speed if np.any(rotation_step) else ACTION_JOINT_SPEED
+        scale = min(1., joint_budget * ACTION_PERIOD /
                     max(1e-12, np.max(np.abs(joint_delta))))
+        if self.rotation_joint_speed > ACTION_JOINT_SPEED:
+            # Faster rotation must not enlarge the translation-only joint budget.
+            translation_joints = self.inverse_jacobian @ np.r_[translation, np.zeros(3)]
+            scale = min(scale, ACTION_JOINT_SPEED * ACTION_PERIOD /
+                        max(1e-12, np.max(np.abs(translation_joints))))
+        if max(self.rotation_scale, self.translation_scale) > 1.:
+            # Keep requested offsets inside the unchanged tracking checks,
+            # including simultaneous full-scale input on several axes.
+            scale = min(scale, .020 / max(1e-12, np.linalg.norm(translation)),
+                        .10 / max(1e-12, np.linalg.norm(rotation_step)))
         translation *= scale
         rotation_step *= scale
         safe_lower = np.minimum(self.lower + 0.002, self.q)

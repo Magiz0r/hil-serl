@@ -77,6 +77,28 @@ class RS485Backend(unittest.TestCase):
         self.assertEqual(len(serial.writes), 2)
         self.assertTrue(all(request[1] == 0x03 for request in serial.writes))
 
+    def test_activation_can_calibrate_without_go_to_position(self):
+        serial = FakeSerial([status_reply(status_byte=0), write_reply(), status_reply(status_byte=0x11)])
+        backend = RobotiqRS485GripperServer(serial_port=serial)
+        backend.activate_gripper(speed=64, force=30, go_to=False)
+        self.assertEqual(serial.writes[1][7:13], bytes([1, 0, 0, 0, 64, 30]))
+
+    def test_stop_retains_activation_and_does_not_open_or_reset(self):
+        serial = FakeSerial([status_reply(status_byte=0x39, requested=255, actual=120),
+                             write_reply(), status_reply(status_byte=0x31, requested=255, actual=120)])
+        backend = RobotiqRS485GripperServer(serial_port=serial)
+        backend.stop()
+        self.assertEqual(serial.writes[1][7], 1)
+        self.assertEqual(serial.writes[1][10], 255)
+
+    def test_invalid_speed_force_are_rejected_before_write(self):
+        serial = FakeSerial([status_reply()])
+        backend = RobotiqRS485GripperServer(serial_port=serial)
+        for kwargs in [dict(speed=-1), dict(force=256), dict(speed=True), dict(force=1.5)]:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                backend.move(0, **kwargs)
+        self.assertEqual(len(serial.writes), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

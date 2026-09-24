@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>TASL FR3 · Capture Console</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/ui/theme.css">
+  <script defer src="/ui/api.js"></script>
+  <script defer src="/ui/demo.js"></script>
+  <script defer src="/ui/cameras.js"></script>
+  <script defer src="/ui/catalog.js"></script>
+  <script defer src="/ui/records.js"></script>
+  <script defer src="/ui/app.js"></script>
+</head>
+<body>
+<svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 7h4l2-3h4l2 3h4v13H4z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8M6 9v12h12V9M10 21v-7h4v7"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 4 12 8-12 8z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v12h5"/></symbol>
+</defs></svg>
+<header class="topbar">
+  <a class="brand" href="#main" aria-label="TASL FR3 采集工作区"><span class="brand-mark">T<span>↗</span></span><span>TASL <b>FR3</b><small>CAPTURE CONSOLE</small></span></a>
+  <div class="top-context"><span class="divider"></span><span>数据采集</span></div>
+  <div class="top-right"><span id="connection" class="badge muted"><i></i>连接中</span><button id="top-finish" class="button danger compact" disabled><svg><use href="#i-stop"/></svg>Stop · 保存</button></div>
+</header>
+<div id="demo-banner" class="demo-banner" hidden><span><b>演示模式</b> · 模拟数据与画面，所有操作仅在此浏览器内生效</span><label>场景 <select id="demo-state"><option value="idle">就绪 · Idle</option><option value="loading">连接中 · Loading</option><option value="running">采集中 · Running</option><option value="saving">保存中 · Saving</option><option value="homing">回零中 · Homing</option><option value="error">异常 · Error</option><option value="offline">断线 · Offline</option><option value="empty">空记录 · Empty</option></select></label></div>
+<main id="main">
+  <section class="page-heading"><div><div class="eyebrow">MANUAL DEMONSTRATIONS</div><h1>采集工作台</h1></div><div class="session-label"><span class="live-dot"></span><span id="session-label">正在读取会话</span></div></section>
+  <section class="task-strip panel task-config" aria-label="任务与场景配置">
+    <div class="task-selector"><label class="field-label" for="task-select">任务 TASK</label><div class="input-actions"><select id="task-select"><option value="">等待任务</option></select><button id="new-task" class="button compact">＋ 新建</button><button id="delete-task" class="icon-button" aria-label="删除当前任务"><svg><use href="#i-close"/></svg></button></div><strong id="task-name" hidden>—</strong><p id="task-prompt" class="tiny">任务可按采集内容创建与切换</p></div>
+    <div class="prompt-editor"><label class="field-label" for="prompt-input">语言指令 PROMPT <span id="prompt-state"></span></label><div class="input-actions"><textarea id="prompt-input" rows="2" maxlength="2000" placeholder="描述这次需要完成的动作"></textarea><button id="apply-prompt" class="button compact" disabled>应用</button></div></div>
+    <div class="layout-selector"><label class="field-label" for="layout-select">场景 LAYOUT <span class="tag">REAL</span></label><div class="input-actions"><select id="layout-select"><option value="">不关联 Layout</option></select><button id="capture-layout" class="button compact">拍摄</button><button id="rename-layout" class="icon-button" aria-label="重命名当前 Layout">✎</button><button id="delete-layout" class="icon-button" aria-label="删除当前 Layout"><svg><use href="#i-close"/></svg></button></div><div class="layout-tools"><label><input type="checkbox" id="ghost-enabled"> 参考叠图</label><input id="ghost-opacity" type="range" min="0" max="100" value="35" aria-label="参考图透明度"><a id="export-layout" class="text-button" hidden download="layout-reference.jpg">导出参考图 ↗</a></div></div>
+    <span id="sample-hz" hidden>—</span>
+  </section>
+  <section class="service-strip" aria-label="服务状态">
+    <span id="service-arm" class="service muted"><i></i>Robot <b>等待</b></span>
+    <span id="service-gripper" class="service muted"><i></i>Gripper <b>等待</b></span>
+    <span id="service-cameras" class="service muted"><i></i>Cameras <b>等待</b></span>
+    <span id="service-control" class="service muted"><i></i>SpaceMouse <b>等待</b></span>
+    <span id="service-motion" class="service muted"><i></i>Motion <b>未知</b></span>
+    <span id="updated" class="updated">等待首次状态</span>
+  </section>
+  <div id="error-banner" class="error-banner" role="alert" hidden><strong>需要处理</strong><span id="error"></span><button id="retry" class="button compact">刷新状态</button></div>
+  <section id="runtime-controls" class="runtime-controls" hidden><span id="runtime-state">控制会话未连接</span><span class="tiny">起始位：当前位置 · Start 从这里开始，Home 单独操作</span><button id="runtime-connect" class="button compact primary">连接控制</button><button id="runtime-disconnect" class="button compact">断开控制</button><button id="runtime-cameras" class="button compact">重连相机</button></section>
+  <div class="workspace">
+    <section class="vision panel" aria-label="相机工作区">
+      <div class="panel-heading"><h2><svg><use href="#i-camera"/></svg>实时视野 <span>CAMERAS</span></h2><span class="tiny">双视角 · 原始比例</span></div>
+      <div class="camera-grid">
+        <figure class="camera" id="camera-external">
+          <figcaption><span><strong>外部视角</strong><small>EXTERIOR · ZED</small></span><span class="camera-tools"><span id="external-badge" class="badge muted"><i></i>连接中</span><button class="icon-button" data-fullscreen="camera-external" aria-label="放大外部相机"><svg><use href="#i-expand"/></svg></button></span></figcaption>
+          <div class="camera-frame"><img id="external" alt="外部相机实时画面"><img id="layout-ghost" class="layout-ghost" alt="当前 Layout 参考叠图" hidden><div class="camera-placeholder" id="external-placeholder"><svg><use href="#i-camera"/></svg><strong>正在连接相机</strong><span>等待第一帧画面</span></div><span class="camera-watermark" hidden>DEMO / 模拟画面</span><span class="frame-label">01 <span>EXTERIOR</span></span><span class="record-indicator" hidden><i></i>REC</span></div>
+          <div class="camera-footer"><span>物体、工作台与操作路径</span><span id="external-age" class="mono">— ms</span></div>
+        </figure>
+        <figure class="camera" id="camera-wrist">
+          <figcaption><span><strong>腕部视角</strong><small>WRIST · ZED</small></span><span class="camera-tools"><span id="wrist-badge" class="badge muted"><i></i>连接中</span><button class="icon-button" data-fullscreen="camera-wrist" aria-label="放大腕部相机"><svg><use href="#i-expand"/></svg></button></span></figcaption>
+          <div class="camera-frame"><img id="wrist" alt="腕部相机：夹指与操作区域"><div class="camera-placeholder" id="wrist-placeholder"><svg><use href="#i-camera"/></svg><strong>正在连接相机</strong><span>等待第一帧画面</span></div><span class="camera-watermark" hidden>DEMO / 模拟画面</span><span class="frame-label">02 <span>WRIST</span></span><span class="record-indicator" hidden><i></i>REC</span></div>
+          <div class="camera-footer"><span>夹指、抓取与操作细节</span><span id="wrist-age" class="mono">— ms</span></div>
+        </figure>
+      </div>
+      <div class="capture-guide"><span class="guide-icon">↗</span><div><strong id="guide-instruction">选择任务、摆好场景，开始采集。</strong><p>Start 后松开旋钮回中；左键闭合夹爪，右键张开。</p></div><span class="tag">人工遥操作</span></div>
+      <div class="telemetry-grid"><div><span class="field-label">机器人状态</span><strong id="robot-detail">等待数据</strong></div><div><span class="field-label">夹爪反馈</span><strong id="gripper-detail">等待数据</strong></div><div><span class="field-label">采集质量</span><strong id="quality-detail">等待数据</strong></div></div>
+    </section>
+    <aside class="control-column" aria-label="采集与机器人控制">
+      <section class="panel capture-panel">
+        <div class="panel-heading"><h2>采集控制 <span>CAPTURE</span></h2><span id="capture-badge" class="badge muted"><i></i>连接中</span></div>
+        <div class="capture-body"><div class="episode-heading"><span id="current-episode" class="mono">EPISODE —</span><span id="mode-label">等待连接</span></div>
+          <div class="record-metrics"><div><strong id="elapsed" class="mono">00:00</strong><span>本条时长</span></div><div><strong id="sample-count" class="mono">0</strong><span>已采样</span></div></div>
+          <ol class="workflow" aria-label="采集阶段"><li id="phase-ready">准备</li><li id="phase-record">采集</li><li id="phase-save">保存</li></ol>
+          <p id="status" class="status-text" aria-live="polite">正在连接相机与控制状态…</p>
+          <p class="tiny">采集起始位：点击 Start 时的当前位置。</p>
+          <div class="primary-actions"><button id="start" class="button primary" disabled><svg><use href="#i-play"/></svg>Start <span>开始采集</span></button></div>
+          <div class="finish-actions" aria-label="结束并保存当前采集"><button id="finish-success" class="button success" disabled>Success<span>成功并保存</span></button><button id="finish-failure" class="button danger" disabled>Fail<span>失败并保存</span></button><button id="finish" class="button stop" disabled>Stop<span>仅保存</span></button></div>
+          <p class="tiny finish-help">点击即停止并保存。Stop 不标记结果，可在采集记录中补充标注。</p>
+          <p id="command-feedback" class="command-feedback" aria-live="polite">停止后保持当前位置，Home 需单独操作。</p>
+          <div class="gripper-prepare" aria-label="采集前夹爪准备"><div class="gripper-heading"><strong>夹爪准备</strong><span class="tiny">不录制</span></div><div class="gripper-actions"><button id="gripper-open" class="button compact" disabled>打开夹爪</button><button id="gripper-close" class="button compact" disabled>闭合夹爪</button></div><p id="gripper-status" class="tiny" aria-live="polite">连接控制后可操作</p><p class="tiny">先夹好物体，手离开画面后再 Start。Stop 可中断。</p></div>
+        </div>
+      </section>
+      <section class="panel home-panel"><div class="home-heading"><h2><svg><use href="#i-home"/></svg>DROID Home</h2><button id="home" class="button compact" disabled>返回 DROID <svg><use href="#i-arrow"/></svg></button></div><p id="home_status">正在读取目标来源</p><p class="tiny">不会自动开合夹爪 · 返回途中可按 Stop 中断</p>
+        <details id="home-details"><summary>目标与操作说明 <span>＋</span></summary><div class="home-details-body"><p id="home-target" class="mono">—</p><p id="home-error">关节反馈：等待数据</p><p id="home_help">自定义末端 Home 仅用于本次控制会话；先抬升、再横移并返回所设末端位姿。</p><p id="official_home_help" hidden>DROID 七关节目标仅供“返回 DROID”使用。连接和 Start 均从当前位置开始。</p><p>回零前先退出接触区域，确认整条手臂返回路径畅通。</p><button id="set_home" class="button compact" disabled>将当前位置设为 Home</button></div></details>
+        <div id="custom-home-panel" class="custom-home-panel"><div class="home-heading"><h3>自定义 Home</h3><button id="custom-home" class="button compact" disabled>返回自定义</button></div><p id="custom-home-status">连接后读取自定义目标</p><button id="set-custom-home" class="button compact" disabled>将当前位置设为自定义 Home</button><details><summary>自定义关节目标 <span>＋</span></summary><p id="custom-home-target" class="mono tiny">尚未设置</p><p id="custom-home-feedback" class="tiny"></p></details><p class="tiny">保存七关节姿态 · 与 DROID 目标独立</p></div>
+      </section>
+    </aside>
+    <section class="panel records-panel" aria-label="记录与日志">
+      <div class="records-header"><div class="tabs" role="tablist" aria-label="会话信息"><button id="tab-episodes" role="tab" aria-selected="true" aria-controls="pane-episodes" data-tab="episodes">采集记录 <span id="episode-total">0</span></button><button id="tab-logs" role="tab" aria-selected="false" aria-controls="pane-logs" data-tab="logs" tabindex="-1">事件日志 <span id="log-total">0</span></button><button id="tab-session" role="tab" aria-selected="false" aria-controls="pane-session" data-tab="session" tabindex="-1">会话信息</button></div><span class="tiny records-scope">当前采集会话</span></div>
+      <div id="pane-episodes" role="tabpanel" aria-labelledby="tab-episodes"><div class="record-toolbar"><div class="record-stats"><span><i class="stat-dot good"></i>成功 <b id="success-count">0</b></span><span>失败 <b id="failure-count">0</b></span><span>待标注 <b id="unlabeled-count">0</b></span><span>不完整 / 作废 <b id="other-count">0</b></span><span class="rate">成功率 <b id="success-rate">—</b></span></div><label class="filter-label"><span class="sr-only">筛选任务</span><select id="record-task-filter"><option value="all">全部任务</option></select></label><label class="filter-label"><span class="sr-only">筛选采集结果</span><select id="episode-filter"><option value="all">全部结果</option><option value="success">成功</option><option value="failure">失败</option><option value="unlabeled">待标注</option><option value="incomplete">不完整</option><option value="discard">作废</option></select></label></div>
+        <div class="table-scroll"><table><thead><tr><th>任务 / Layout</th><th>EPISODE</th><th>开始时间</th><th>采样数</th><th>时长</th><th>结果</th><th><span class="sr-only">详情</span></th></tr></thead><tbody id="episodes"></tbody></table></div><div id="empty-records" class="empty-state"><span>⌁</span><strong>等待第一条演示</strong><p>点击 Start 开始；Stop 后，记录将显示在这里。</p></div>
+        <div class="records-footer"><span>成功率仅统计明确的成功 / 失败</span><button id="export-summary" class="text-button" disabled>导出记录摘要 ↗</button></div>
+      </div>
+      <div id="pane-logs" role="tabpanel" aria-labelledby="tab-logs" hidden><div class="log-toolbar"><span>本页连接与操作事件 · 不替代设备日志</span><label><input id="log-follow" type="checkbox" checked> 跟随最新</label></div><div id="logs" class="logs" tabindex="0" aria-label="事件日志"></div></div>
+      <div id="pane-session" role="tabpanel" aria-labelledby="tab-session" hidden><dl class="session-info"><div><dt>数据目录</dt><dd><code id="directory">等待连接</code><button id="copy-directory" class="icon-button" aria-label="复制数据目录"><svg><use href="#i-copy"/></svg></button></dd></div><div><dt>采集链路</dt><dd>浏览器 → Desktop 录制器 → 本次 SpaceMouse 控制会话 → NUC</dd></div><div><dt>结束采集</dt><dd>Stop 停用输入并保存当前条目，保持实测位姿；不会关闭整个控制服务。</dd></div><div><dt>退出会话</dt><dd>SpaceMouse 双键同时按下退出控制。关闭浏览器不会停止录制器。</dd></div><div><dt>记录内容</dt><dd>两路原图、机器人状态、SpaceMouse 输入、夹爪反馈与命令。尚未转换为训练数据。</dd></div></dl></div>
+    </section>
+  </div>
+  <footer class="page-footer"><span><span class="footer-logo">TASL</span> ROBOT LEARNING LAB</span><span id="footer-mode">FR3 · 手动示范采集</span><a href="#main">返回工作区 ↑</a></footer>
+</main>
+<div class="mobile-controls" aria-label="快捷采集操作"><span id="mobile-state">等待连接</span><button id="mobile-start" class="button primary" disabled>Start</button><button id="mobile-success" class="button success" disabled>Success</button><button id="mobile-failure" class="button danger" disabled>Fail</button><button id="mobile-finish" class="button stop" disabled>Stop</button></div>
+<dialog id="catalog-dialog"><form id="catalog-form"><div class="dialog-heading"><h2 id="catalog-dialog-title">新建任务</h2><button type="button" class="icon-button" id="catalog-cancel" aria-label="关闭">×</button></div><label class="field-label" for="catalog-name">名称</label><input id="catalog-name" maxlength="100" required><div id="catalog-task-fields"><label class="field-label" for="catalog-prompt">Prompt · 语言指令</label><textarea id="catalog-prompt" rows="3" maxlength="2000"></textarea><label class="field-label" for="catalog-success">成功标准</label><textarea id="catalog-success" rows="2" maxlength="2000"></textarea></div><label id="catalog-ood-field" hidden><input id="catalog-ood" type="checkbox"> OOD Layout · 与常规场景不同</label><p id="catalog-form-error" class="bad" role="alert"></p><div class="dialog-actions"><button class="button primary" type="submit" id="catalog-submit">保存</button></div></form></dialog>
+<dialog id="catalog-confirm"><div class="dialog-heading"><h2>确认删除</h2></div><p id="catalog-confirm-message"></p><div class="dialog-actions"><button id="catalog-confirm-cancel" class="button">取消</button><button id="catalog-confirm-delete" class="button danger">确认删除</button></div></dialog>
+<dialog id="confirm-home"><form method="dialog"><div class="dialog-heading"><h2 id="confirm-home-title">覆盖本次会话的 Home？</h2><button class="icon-button" value="cancel" aria-label="取消"><svg><use href="#i-close"/></svg></button></div><p id="confirm-home-message">读取当前实测位姿作为后续返回目标，覆盖本次控制会话中原有的自定义 Home。设置本身不会移动机械臂。</p><div class="dialog-actions"><button class="button" value="cancel">取消</button><button id="confirm-set-home" class="button primary" value="confirm">确认覆盖目标</button></div></form></dialog>
+<dialog id="episode-dialog"><div class="dialog-heading"><h2 id="episode-dialog-title">记录详情</h2><button id="close-episode" class="icon-button" aria-label="关闭详情"><svg><use href="#i-close"/></svg></button></div><dl id="episode-detail" class="session-info"></dl>
+  <div id="episode-review" hidden>
+    <p id="record-video-status" class="tiny"></p><div class="video-actions"><a id="download-external" class="button compact" hidden>下载外部 MP4</a><a id="download-wrist" class="button compact" hidden>下载腕部 MP4</a><button id="generate-videos" class="button compact" hidden>生成 MP4</button></div>
+    <button id="load-recording" class="button">加载双视角回放</button>
+    <div id="episode-playback" hidden><div class="playback-views"><figure><img id="playback-external" alt="外部视角录像"><video id="video-external" muted playsinline preload="metadata" aria-label="外部视角 MP4" hidden></video><figcaption>Exterior · 已录制</figcaption></figure><figure><img id="playback-wrist" alt="腕部视角录像"><video id="video-wrist" muted playsinline preload="metadata" aria-label="腕部视角 MP4" hidden></video><figcaption>Wrist · 已录制</figcaption></figure></div><div class="playback-controls"><button id="play-recording" class="button">播放</button><input id="playback-seek" type="range" min="0" max="0" value="0" aria-label="回放进度"><span id="playback-time" class="tiny"></span></div></div>
+    <label class="field-label" for="record-outcome">补充判定</label><select id="record-outcome"><option value="unlabeled">待标注</option><option value="success">成功</option><option value="failure">失败</option><option value="discard">作废</option><option value="incomplete" disabled>不完整 · 保留异常状态</option></select>
+    <label class="field-label" for="record-prompt">本条记录的 Prompt</label><textarea id="record-prompt" rows="2" maxlength="2000"></textarea>
+    <label class="field-label" for="record-notes">备注</label><textarea id="record-notes" rows="2" maxlength="4000"></textarea>
+    <p id="record-error" class="bad" role="alert"></p><div class="dialog-actions"><button id="delete-record" class="button danger">删除记录</button><button id="save-review" class="button primary">保存判定与备注</button></div>
+    <div id="confirm-record-delete" hidden><p>将本条移出列表和统计，原始图像与轨迹文件会保留。</p><div class="dialog-actions"><button id="cancel-record-delete" class="button">取消</button><button id="accept-record-delete" class="button danger">确认移出</button></div></div>
+  </div><p class="tiny">原始图像与轨迹保存在数据目录中。修改记录不会移动机器人。</p>
+</dialog>
+<noscript>请启用 JavaScript 查看采集状态；本页面加载不会触发机器人动作。</noscript>
+</body>
+</html>

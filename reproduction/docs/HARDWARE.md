@@ -1,39 +1,34 @@
-# 硬件适配与隔离
+# FR3 硬件与部署
 
-最后一次状态核验为 2026-09-18 17:45 PDT：本轮控制已停止，机械臂仍通电。当前操作基线见 [SpaceMouse 说明](SPACEMOUSE.md)和[配置快照](../configs/SPACEMOUSE_BASELINE.json)。逐次排查经过保留在 [硬件历史](history/HARDWARE-2026-09.md)及[真机测试记录](history/PREFLIGHT-2026-09-18.md)。
+本页描述截至 2026-09-23 的配置与验证范围。实时连接、错误和采集状态以网页及设备反馈为准；历史记录不表示服务现在仍在运行。
 
-## 硬件与软件
-
-| 组件 | 配置与结果 |
+| 组件 | 当前配置 |
 | --- | --- |
-| PC | `/home/zwqty/miniconda3/envs/hilserl`，Python 3.10.21，RTX 4090 |
-| NUC | SSH 别名 `FrankaNUC`，Ubuntu 22.04.5，实时内核 `5.15.0-1105-realtime` |
-| FR3 | `172.16.0.1`，系统 5.9.2；libfranka 0.18.1、ROS1 Noetic 控制端 |
-| 外部相机 | ZED 2i；USB 端口路径区分同名设备 |
-| 腕部相机 | ZED-M；使用稳定 by-id 路径 |
-| 夹爪 | Robotiq 2F-85，FTDI USB-RS485，NUC `/dev/ttyUSB0`；仅只读通信实测 |
-| SpaceMouse | Wireless BT 的 USB 接口 `256f:c63a`；本次对应 `/dev/hidraw5` |
+| Desktop | `hilserl` Conda 环境，Python 3.10.21，RTX 4090；运行网页、相机、录制器和 SpaceMouse 桥接 |
+| NUC | SSH 别名 `FrankaNUC`；Ubuntu 22.04.5，实时内核 `5.15.0-1105-realtime` |
+| Franka FR3 | `172.16.0.1`，系统 5.9.2；独立 ROS1 Noetic / libfranka 0.18.1 控制端 |
+| 外部相机 | ZED 2i，USB `6.1` 的稳定 by-path 路径，接入 `external` |
+| 腕部相机 | ZED-M，稳定 by-id 路径，接入 `wrist` |
+| 第三台相机 | 另一台 ZED 2i，USB `3.4.1`；已从 USB/sysfs 确认存在，尚未接入网页、录制、MP4 或设备权限规则 |
+| 夹爪 | Robotiq 2F-85，NUC 上 FTDI USB-RS485；独立 SSH/串口通道 |
+| 人工输入 | SpaceMouse Wireless BT USB `256f:c63a`，六轴操作及左右键开合 |
 
-相机使用 UVC 左眼图像，不依赖 ZED Python SDK；原始双目拼接为 2560×720，截取单眼 1280×720，再按环境流程转换到 128×128 RGB。未使用深度或硬件同步。配置在 [cameras.json](../configs/cameras.json)，USB 拓扑改变后需要重新识别。
+相机采集配置见 [cameras.json](../configs/cameras.json)。两路均以 15 FPS 读取 2560×720 双目拼接，保留左眼 1280×720 原图，预览为 640×360；episode 状态/帧引用和 MP4 为约 10 Hz / 10 FPS。没有深度或硬件同步。两台 ZED 2i 的 by-id 名称可能相同，新增相机应使用经过核对的 by-path，不能仅靠 `/dev/videoN` 顺序区分。
 
-SpaceMouse 同一 hidraw 路径可能被 HIDAPI 枚举多次，驱动按路径去重。现场只对该设备授予当前用户访问权限，未改全局 udev 规则。重插设备后应重新核对权限。
+Desktop 持久设备权限入口是 [setup_capture_permissions.sh](../setup_capture_permissions.sh)，涵盖当前两路相机与 SpaceMouse；普通启动、停止不需要输入 sudo 密码。设备权限安装和新机器部署见 [Capture Console](CAPTURE_CONSOLE.md)。
 
-Robotiq 新后端构造时只读状态，显式动作方法才会写 Modbus。`franka_server.py --gripper_type=RobotiqRS485` 已接入该后端；本次手动入口没有启动夹爪 server，也没有调用激活、清错或开合。
+## 控制与记录
 
-## 隔离范围
+日常入口是根目录的 `start_capture.sh` / `stop_capture.sh`。启动完成后保持当前位置，等待用户显式 Start。录制使用 SpaceMouse，停止结果分为 Success / Fail / Stop。未录制时可以通过网页预先开合夹爪，准备过程不会写入 episode。
 
-- 镜像：`hil-serl-fr3:2026-09-18`，摘要记录在基线快照；默认命令 `sleep infinity`。
-- NUC 专用目录：`/home/tasl/hil_serl_runtime_20260918/`；源文件只读挂载，只有本轮 `state/` 可写。
-- 专用容器：`hil-serl-fr3-hold-20260918`；根文件系统只读，无设备映射、非 privileged、无自动重启。
-- ROS master：`http://127.0.0.1:11321`；HOME、ROS 日志、缓存和数据均指向专用 state。
-- PC 日志和相机预览保留在本仓库忽略的 `reproduction/logs/`，不与示教、训练数据混用。
+DROID Home 和自定义七关节 Home 独立；设置自定义 Home 不会移动手臂，返回 Home 不自动开合夹爪。Home 使用本项目 ROS 关节位置轨迹插件和 Franka 内部关节阻抗，不能与其他项目的 Polymetis 接口混同。实现与反馈说明见 [Capture Console](CAPTURE_CONSOLE.md)、[NUC 源码索引](../nuc/README.md)。
 
-原有 `remote-teleop-ros2`、`remote-teleop-serl-soft`、`rlinf-explore` 容器的 PID、启动时间和重启次数在收尾检查中未变。没有停止、重建或清理它们，也没有改 GPU 驱动、内核或全局网络。旧 freedrive sidecar 和日志跟踪进程保留原状。
+已经保存真实双视角演示，支持结果补标、Task/Layout 快照和 MP4。原始采集尚未转换为完整 HIL-SERL/AutoSERL 训练 transition；真实奖励分类器和在线 RL 尚未完成。AutoSERL 的离线适配与数据边界见 [AutoSERL README](../autoserl/README.md)。
 
-最后核验没有 `rteleop-droid-nuc` 容器；早期记录里曾出现过不同名称和状态，恢复操作必须从实际运行状态核对，不能照旧手册直接启动或停止服务。
+## 部署与本机数据
 
-## 当前验证范围
+NUC 使用 `/home/tasl/hil_serl_runtime_20260918/`，机械臂源目录、状态目录与夹爪部署分开。镜像、容器 ID、源码摘要、控制器构建摘要均在启动时核对；具体映射见 [NUC 预检说明](../nuc/PREFLIGHT.md)。这些是本实验室的部署参数，新机器需要重新配置和核验。
 
-机械臂保持和 SpaceMouse 手动移动已经实测。输入积压修复后，操作者认可跟手效果，速度仍有优化空间。J4 曾越过当前 ROS 模型配置边界并触发诊断退出；这不是机器人硬限位故障，也不能据此宣称完整关节限位规避已经验证。现有局部雅可比预测仍须与实测状态检查一起使用。
+Desktop 的 `reproduction/data/`、`logs/`、`runtime/` 以及 NUC 运行目录保存在本机，不提交 Git。源码中的构建清单和基线 SHA256 是可追溯配置，随代码提交；控制器二进制和 wheel 缓存不上传。
 
-夹爪实机动作、真实演示、真实奖励分类器、在线 RL 和完整人工干预数据链路尚未验证。后续需要选定任务、成功判据和工作范围，再推进相应流程。
+旧状态保留在 [2026-09-18 快照](history/HARDWARE-2026-09-18.md)与 [历史索引](history/README.md)。

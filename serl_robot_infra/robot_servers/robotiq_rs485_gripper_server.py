@@ -67,7 +67,9 @@ class RobotiqRS485GripperServer(GripperServer):
         }
 
         if serial_port is None:
+            import fcntl
             import serial
+            import termios
 
             serial_port = serial.Serial(
                 device,
@@ -79,8 +81,17 @@ class RobotiqRS485GripperServer(GripperServer):
                 write_timeout=timeout,
                 exclusive=True,
             )
+            try:
+                fcntl.ioctl(serial_port.fileno(), termios.TIOCEXCL)
+            except Exception:
+                serial_port.close()
+                raise
         self._serial = serial_port
-        self.last_status = self.read_status()
+        try:
+            self.last_status = self.read_status()
+        except Exception:
+            self._serial.close()
+            raise
 
     def _request(self, body, response_length):
         request = body + modbus_crc(body)
@@ -125,8 +136,18 @@ class RobotiqRS485GripperServer(GripperServer):
             raise IOError("Unexpected Robotiq write acknowledgement")
         return self.read_status()
 
-    def activate_gripper(self):
-        self._command.update(rACT=1, rGTO=1, rATR=0, rPR=0, rSP=255, rFR=30)
+    @staticmethod
+    def _byte(value):
+        if type(value) is not int or not 0 <= value <= 255:
+            raise ValueError("Gripper speed/force must be an integer in [0, 255]")
+        return value
+
+    def activate_gripper(self, *, speed=255, force=30, go_to=True):
+        speed, force = self._byte(speed), self._byte(force)
+        if type(go_to) is not bool:
+            raise ValueError("go_to must be boolean")
+        self._command.update(rACT=1, rGTO=int(go_to), rATR=0, rPR=0,
+                             rSP=speed, rFR=force)
         return self._write_command()
 
     def reset_gripper(self):
@@ -146,8 +167,24 @@ class RobotiqRS485GripperServer(GripperServer):
         finally:
             self._command["rSP"] = 255
 
-    def move(self, position):
+    def move(self, position, *, speed=None, force=None):
+        updates = {}
+        if speed is not None:
+            updates['rSP'] = self._byte(speed)
+        if force is not None:
+            updates['rFR'] = self._byte(force)
+        self._command.update(updates)
         self._command.update(rACT=1, rGTO=1, rPR=max(0, min(255, int(position))))
+        return self._write_command()
+
+    def stop(self):
+        """Clear go-to while retaining activation and the last requested position.
+
+        This does not release a held object. Activation itself must be cancelled
+        with reset_gripper(), because rGTO does not govern calibration motion.
+        """
+        self._command.update(rACT=self.last_status['gACT'], rGTO=0, rATR=0,
+                             rPR=self.last_status['gPR'])
         return self._write_command()
 
     def get_position(self):

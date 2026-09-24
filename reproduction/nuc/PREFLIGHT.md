@@ -1,6 +1,6 @@
 # 独立 NUC 控制端与恢复预检
 
-截至 2026-09-18 17:45 PDT，本轮控制已按用户要求暂停，专用容器和 PC/NUC 控制进程均退出。机械臂仍通电，Desk 的 FCI 开关和原令牌保留。详细过程已归档到 [真机测试记录](../docs/history/PREFLIGHT-2026-09-18.md)，当前配置见 [基线快照](../configs/SPACEMOUSE_BASELINE.json)。
+日常连接由 [Capture Console](../docs/CAPTURE_CONSOLE.md) 的 Bash / 网页入口管理。每次连接按实际 Desk、容器、设备和源文件摘要核对；旧文档中的“已停止”或“正在运行”不是当前状态。2026-09-18 的收尾与基线见 [真机测试记录](../docs/history/PREFLIGHT-2026-09-18.md)和 [配置快照](../configs/SPACEMOUSE_BASELINE.json)。
 
 ## 部署布局
 
@@ -16,11 +16,11 @@
 | `manual_guard.py`、`translation_guard.py`、`fr3_kinematics.py` | 动作计算、状态检查和当前模型下的局部关节预测 |
 | `validate_hold_launch.py`、`offline_*_smoke.py` | 配置和合成 ROS 验证；合成 ROS 要求独立 `--network none` 容器 |
 
-NUC 运行目录为 `/home/tasl/hil_serl_runtime_20260918/`，其中 `source/` 只读挂载到 `/opt/hil-serl-preflight`，`state/` 独立可写。部署清单 `source-sha256.json` 包含 13 个源文件，主机入口在启动前核对清单。ROS master 为 `http://127.0.0.1:11321`。镜像默认命令为 `sleep infinity`，没有自动启动控制器。
+NUC 运行目录为 `/home/tasl/hil_serl_runtime_20260918/`，其中 `source/` 只读挂载到 `/opt/hil-serl-preflight`，`state/` 独立可写。部署清单 `source-sha256.json` 随功能部署更新，主机入口在启动前逐项核对，不固定假设文件数量。ROS master 为 `http://127.0.0.1:11321`。镜像默认命令为 `sleep infinity`，没有自动启动控制器。夹爪的 `gripper_source/`、摘要和临时容器独立，见 [夹爪说明](../docs/GRIPPER.md)。后续 Home 与旋转插件索引见 [README.md](README.md)。
 
 ## 恢复前重新核对
 
-恢复动作测试时，需要操作者在场并准备好急停；此前的手动测试授权和可用配置不会替代当前硬件状态核验。此次整理仓库不恢复硬件运行。
+恢复动作测试时，需要操作者在场并准备好急停；此前的可用配置不会替代当前硬件状态核验。
 
 1. 从实际 `docker ps -a`、进程、端口和机器人连接确认服务归属。只使用本轮专用容器，保留其他部署；旧记录中的 DROID 容器名称不能直接沿用。
 2. 只读确认 Desk 执行模式、任务空闲、无错误、FCI 状态和控制权归属，核对 freedrive sidecar 没有 Robot 对象；不调用其切换接口。
