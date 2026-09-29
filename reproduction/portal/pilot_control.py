@@ -9,7 +9,7 @@ import time
 import threading
 from reproduction.portal.pilot_gripper import PREPARE_ACTIONS
 
-ACTIONS = ('lock', 'start', 'set_home', 'home', 'set_custom_home', 'custom_home', 'recovery_check', 'policy_start', *PREPARE_ACTIONS)
+ACTIONS = ('lock', 'start', 'set_home', 'home', 'set_custom_home', 'custom_home', 'recovery_check', 'policy_start', 'hil_policy_start', *PREPARE_ACTIONS)
 
 
 class PilotSocket:
@@ -44,7 +44,7 @@ class PilotSocket:
         result = dict(id=self.latest['id'], action=self.latest['action'], connected=connected)
         if 'policy' in self.latest:
             p=self.latest['policy']
-            if self.latest['action']!='policy_start' or set(p)!={'index','action','stamp'}:
+            if self.latest['action'] not in ('policy_start','hil_policy_start') or set(p)!={'index','action','stamp'}:
                 raise ValueError('invalid policy envelope')
             result['policy']=dict(index=p['index'], action=p['action'], age=time.monotonic()-p['stamp'], buttons=[False,False])
         return result
@@ -86,7 +86,7 @@ class PilotClient:
 
     def set_policy(self, index, action):
         with self.lock:
-            if self.action != 'policy_start': raise ValueError('online control is stopped')
+            if self.action not in ('policy_start','hil_policy_start'): raise ValueError('online control is stopped')
             self.policy = dict(index=index, action=list(action), stamp=time.monotonic())
             self.refresh()
 

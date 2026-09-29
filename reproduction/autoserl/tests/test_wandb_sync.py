@@ -98,6 +98,22 @@ def test_watch_does_not_discover_nested_backups_or_foreign_demos(tmp_path):
         sync_id(tmp_path / 'outside', tmp_path)
 
 
+def test_hil_wandb_discovery_human_metrics_and_frozen_mode(tmp_path):
+    folder=tmp_path/'reproduction/logs/hilserl-web/run'
+    write(tmp_path/'reproduction/configs/autoserl/fmb_insertion_recovery_v1.json',dict(demo_pickle_sha256='demo'))
+    manifest=dict(schema='hilserl_online_run_v1',synthetic=False,demo_sha256='demo',human_intervention=True)
+    write(folder/'manifest.json',manifest)
+    write(folder/'episode_0000.json',dict(episode=0,outcome='success',transitions=10,human_interventions=3,automatic_interventions=0))
+    assert selected_folders([],True,tmp_path)==[folder]
+    data=snapshot(folder)
+    assert data['config']['algorithm_id']=='hilserl' and not data['config']['automatic_assistance']
+    assert data['summary']['train/human_fraction']==.3
+    write(folder/'manifest.json',dict(manifest,schema='hilserl_frozen_evaluation_v1',human_intervention=False))
+    write(folder/'episode_0000.json',dict(episode=0,outcome='success',transitions=10,human_interventions=0,automatic_interventions=0,evaluation_valid=True))
+    data=snapshot(folder)
+    assert data['summary']['eval/gradient_updates']==0 and data['summary']['eval/human_fraction']==0
+
+
 def test_real_saved_runs_match_known_results():
     root = Path(__file__).resolve().parents[3]
     folder = root / 'reproduction/logs/autoserl-web/20260925T203736-evaluate-f625fd'

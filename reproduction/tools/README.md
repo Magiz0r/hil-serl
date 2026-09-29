@@ -12,6 +12,7 @@ Python 工具使用 `python -m reproduction.tools.<模块名>`。
 | `probe_robotiq_readonly` | 一次串口 FC03 状态读取，不激活、清错或开合夹爪；在串口所在机器使用 |
 | `offline_smoke` | 本机 GPU、依赖导入和 replay buffer 检查，无机器人 I/O |
 | `offline_learning` | 合成图像的 SAC / 奖励分类器梯度检查，无机器人 I/O |
+| `update_hil_controller` | 本机 `--prepare` 构建离线包；NUC 上校验 / 显式 `--apply` 更新单个控制模块，不启动控制，见 [HIL-SERL](../hilserl/README.md) |
 | `deploy_gripper` | 需要 `--deploy`；写入专用 NUC 夹爪源码及清单，不启动硬件 |
 | `setup_capture_permissions.sh` | 一次性管理员配置，写 udev / 设备 ACL；日常运行无需再次执行 |
 

@@ -24,9 +24,12 @@ def schedule():
             for pair in range(5) for condition in ('early', 'latest')]
 
 
-def select_checkpoints(source, demo_sha):
+def select_checkpoints(source, demo_sha, *, algorithm='autoserl'):
     source = Path(source).resolve()
     manifest = json.loads((source/'manifest.json').read_text())
+    from .provenance import require_algorithm
+    require_algorithm(manifest,algorithm)
+    if not manifest.get('eligible_for_training',True):raise ValueError('Expected a training checkpoint')
     if manifest['synthetic'] or manifest['demo_sha256'] != demo_sha:
         raise ValueError('Evaluation requires the same real single demonstration')
     actor = [json.loads(x) for x in (source/'actor-events.jsonl').read_text().splitlines()]
@@ -203,8 +206,11 @@ class EvaluationRunner(ContinuousRunner):
         self.training.select(trial['condition'], trial['seed'])
         # Each trial starts with the same intervention state. An earlier success
         # must not permanently disable assistance for a later A/B trial.
-        self.env.forever_no_window_intervention = not self.automatic_assistance
-        self.env.total_recover_cnt = 0
+        if self.algorithm_id=='autoserl':
+            self.env.forever_no_window_intervention = not self.automatic_assistance
+            self.env.total_recover_cnt = 0
+        elif self.base.human_intervention_enabled:
+            raise RuntimeError('Human intervention must be disabled during evaluation')
         self.training.event('evaluation_trial', episode=self.episode, **trial,
             checkpoint=self.training.checkpoints[trial['condition']], gradient_updates=0,
             automatic_assistance=self.automatic_assistance)
@@ -271,8 +277,8 @@ class EvaluationRunner(ContinuousRunner):
                 signal.signal(signal.SIGTERM, previous)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(*, algorithm='autoserl'):
+    parser = argparse.ArgumentParser(description=('Frozen HIL-SERL evaluation; no human or automatic assistance.' if algorithm=='hilserl' else __doc__))
     parser.add_argument('--execute-attended-evaluation', action='store_true', required=True)
     parser.add_argument('--source-run', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
@@ -283,27 +289,32 @@ def main():
     parser.add_argument('--start-at-home', action='store_true',
         help='Explicitly enable starting after Home checks; default is prepared and paused')
     args = parser.parse_args()
+    if algorithm=='hilserl':args.disable_automatic_assistance=True
     if not 1<=args.episodes<=100:parser.error('Evaluation episodes must be 1 to 100')
     configure()
     import numpy as np
     from .online_env import PortalEnv, PortalSignals
     from .intervention import AutoIntervention
     runtime = ROOT/'reproduction/runtime'
+    runtime.mkdir(exist_ok=True)
     with (runtime/'autoserl-actor.lock').open('a') as claim:
         fcntl.flock(claim, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        base = PortalEnv(ROOT)
+        if algorithm=='hilserl':
+            from reproduction.hilserl.online_env import HILPortalEnv
+            base=HILPortalEnv(ROOT,evaluation=True)
+        else:base=PortalEnv(ROOT)
         selection = base.selection
         trials=schedule()
         if args.checkpoint:
             from .train_online import checkpoint_metadata
-            path,updates,count=checkpoint_metadata(args.source_run,args.checkpoint,selection['demo_pickle_sha256'])
+            path,updates,count=checkpoint_metadata(args.source_run,args.checkpoint,selection['demo_pickle_sha256'],algorithm=algorithm)
             checkpoints={'selected':dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                 source_updates=updates,online_steps=count)}
             trials=[dict(condition='selected',pair=i+1,seed=9040+i) for i in range(args.episodes)]
         else:
-            checkpoints = select_checkpoints(args.source_run, selection['demo_pickle_sha256'])
+            checkpoints = select_checkpoints(args.source_run, selection['demo_pickle_sha256'],algorithm=algorithm)
         args.output.mkdir(parents=True, exist_ok=False)
-        atomic_json(args.output/'manifest.json', dict(schema='autoserl_frozen_evaluation_v1',
+        atomic_json(args.output/'manifest.json', dict(schema=f'{algorithm}_frozen_evaluation_v1',algorithm_id=algorithm,human_intervention=False,
             synthetic=False, eligible_for_training=False, initial_demo_episodes=1,
             demo_sha256=selection['demo_pickle_sha256'], source_run=str(args.source_run.resolve()),
             checkpoints=checkpoints, schedule=trials, gradient_updates=0,
@@ -315,10 +326,12 @@ def main():
         with (ROOT/selection['demo_path']).open('rb') as stream:
             demo = pickle.load(stream)
         policy = FrozenPolicy(args.output, demo[0]['observations'], checkpoints)
-        env = AutoIntervention(base, np.zeros(6), expert=PortalSignals(), demo_path=ROOT/selection['demo_path'],
-            demo_initial_tcp_pose=selection['demo_initial_tcp_pose'], recover_point0=selection['recover_point0'],
-            recover_point1=selection['recover_point1'], enable_interventions=not args.disable_automatic_assistance,
-            **selection['control_parameters'])
+        env=base
+        if algorithm=='autoserl':
+            env = AutoIntervention(base, np.zeros(6), expert=PortalSignals(), demo_path=ROOT/selection['demo_path'],
+                demo_initial_tcp_pose=selection['demo_initial_tcp_pose'], recover_point0=selection['recover_point0'],
+                recover_point1=selection['recover_point1'], enable_interventions=not args.disable_automatic_assistance,
+                **selection['control_parameters'])
         try:
             print(f'Frozen actors ready. {len(trials)} attended trials; automatic_assistance={env.enable_interventions}; Home resets remain manual.', flush=True)
             EvaluationRunner(base, env, policy, args.output, start_paused=not args.start_at_home,trials=trials).run()

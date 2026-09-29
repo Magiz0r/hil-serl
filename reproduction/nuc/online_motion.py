@@ -10,7 +10,7 @@ from recovery_check import RecoveryCheckMotion
 
 
 class OnlineMotion(RecoveryCheckMotion):
-    ACTIONS = RecoveryCheckMotion.ACTIONS + ('policy_start',)
+    ACTIONS = RecoveryCheckMotion.ACTIONS + ('policy_start', 'hil_policy_start')
 
     def __init__(self, *args, online_plan, online_log, **kwargs):
         super().__init__(*args, **kwargs)
@@ -39,10 +39,12 @@ class OnlineMotion(RecoveryCheckMotion):
         self.inflight = None
         self.online_started = self.online_last_action = 0.
         self.online_command_id = None
+        self.human_intervention_enabled = False
 
     def status(self):
         return dict(super().status(), online=dict(copy.deepcopy(self.online),
-            available=True, plan_sha256=self.online_sha,
+            available=True, plan_sha256=self.online_sha, human_intervention_v1=True,
+            human_intervention_enabled=self.human_intervention_enabled,
             gripper_position=self.online_plan['gripper_position'],
             command_id=self.online_command_id))
 
@@ -50,7 +52,7 @@ class OnlineMotion(RecoveryCheckMotion):
         if self.mode == 'policy':
             self.end_online('operator_stop' if command == 'lock' else 'new_command', now)
             return
-        if command != 'policy_start':
+        if command not in ('policy_start', 'hil_policy_start'):
             return super().handle_command(command, now, sample)
         if self.mode != 'locked' or self.joint.phase != 'idle' or self.custom_saving:
             self.error = '请先停止当前操作'; return
@@ -63,6 +65,7 @@ class OnlineMotion(RecoveryCheckMotion):
                     or max(abs(v) for v in sample['dq']) > .03):
                 raise ValueError('请先退出接触并返回原自定义 Home')
             self.check_online_state(starting=True)
+            self.human_intervention_enabled = command == 'hil_policy_start'
             self.online = dict(phase='active', index=-1, completed_index=-1, result=None,
                 reason=None, operator_success=False, operator_abort=False)
             self.inflight = None
@@ -125,7 +128,10 @@ class OnlineMotion(RecoveryCheckMotion):
             return result
         try:
             self.check_online_state()
-            if np.linalg.norm(packet['axes']) > .05:
+            axes = np.asarray(packet['axes'], float)
+            if axes.shape != (6,) or not np.isfinite(axes).all() or np.max(np.abs(axes)) > 1.+1e-7:
+                raise ValueError('invalid_human_action')
+            if not self.human_intervention_enabled and np.linalg.norm(axes) > .05:
                 raise ValueError('spacemouse_takeover')
             if payload is None:
                 if now-self.online_started > 3.:
@@ -144,8 +150,8 @@ class OnlineMotion(RecoveryCheckMotion):
                     or any(type(b) is not bool for b in buttons)):
                 raise ValueError('invalid_or_stale_policy_action')
             if buttons[0] or buttons[1]:
-                self.online.update(operator_success=buttons[0] and not buttons[1], operator_abort=buttons[1])
-                self.end_online('success' if self.online['operator_success'] else 'operator_abort', now)
+                self.online.update(operator_success=buttons[0] and not buttons[1], operator_abort=buttons[1] and not buttons[0])
+                self.end_online('operator_stop' if all(buttons) else 'success' if self.online['operator_success'] else 'operator_abort', now)
                 return self.guard.pose()
             if self.inflight and now-self.online_last_action >= .1-1e-9:
                 self.complete_action(now)
@@ -159,7 +165,10 @@ class OnlineMotion(RecoveryCheckMotion):
             if index != self.online['index']+1 or self.inflight is not None:
                 raise ValueError('unordered_policy_action')
             rotation = self.guard.measured_rotation
-            world = np.r_[rotation.apply(action[:3]), rotation.apply(action[3:])]
+            # Match SpacemouseIntervention: replace only while input is nonzero.
+            # Select once per acknowledged action; never mix two targets in replay.
+            human = self.human_intervention_enabled and np.linalg.norm(axes) > .001
+            world = axes.copy() if human else np.r_[rotation.apply(action[:3]), rotation.apply(action[3:])]
             # Project the target into the task workspace before publishing.
             target = np.clip(self.guard.measured+world[:3]*.01, self.online_lower, self.online_upper)
             world[:3] = (target-self.guard.measured)/.01
@@ -172,7 +181,9 @@ class OnlineMotion(RecoveryCheckMotion):
             self.guard.execute_world_action(np.clip(world,-1.,1.))
             decision = copy.deepcopy(self.guard.decision)
             self.inflight = dict(command_id=self.command_id,index=index,started_at=now,
-                requested_action=action.tolist(), **decision)
+                requested_action=action.tolist(), human_intervention=bool(human),
+                intervention_source='human' if human else 'policy', **decision)
+            self.online['intervention_source'] = self.inflight['intervention_source']
             self.online['index'] = index
             self.online_last_action = now
         except ValueError as error:

@@ -24,6 +24,7 @@ class SyntheticPortal:
         from official_home import JointHome
         from online_motion import OnlineMotion
         self.np=np;self.time=100.;self.seq=0;self.cid=1;self.count=0
+        self.axes=[0.]*6;self.command='policy_start'
         p=json.loads((root/'reproduction/configs/autoserl/fmb_insertion_online_v1.json').read_text())
         self.state=dict(q=p['custom_home_q'],dq=[0.]*7,xyz=p['initial_pose'][:3],
             rotation=Rotation.from_quat(p['initial_pose'][3:]).as_matrix().flatten(order='F').tolist(),
@@ -41,7 +42,8 @@ class SyntheticPortal:
             ok,image=cv2.imencode('.jpg',np.full((720,1280,3),40+80*i,np.uint8));assert ok
             self.images[name]=dict(jpeg_base64=base64.b64encode(image).decode(),sequence=1,pc_captured_at=time.monotonic())
 
-    def tick(self,policy=None,command='policy_start'):
+    def tick(self,policy=None,command=None):
+        command=command or self.command
         self.time+=.02;self.seq+=1
         s=self.state;g=self.guard;np=self.np
         s.update(received_at=self.time,stamp=self.time,xyz=g.target.tolist(),
@@ -49,7 +51,7 @@ class SyntheticPortal:
         g.check_state(s,self.time,np.c_[np.eye(6),np.zeros(6)])
         pilot=dict(id=self.cid,action=command,connected=True)
         if policy is not None:pilot['policy']=policy
-        self.motion.step(dict(seq=self.seq,server_time=self.time,axes=[0.]*6,enable=False,stop=False,pilot=pilot),self.time,.02,s)
+        self.motion.step(dict(seq=self.seq,server_time=self.time,axes=self.axes,enable=False,stop=False,pilot=pilot),self.time,.02,s)
 
     def observation(self):
         return dict(state=copy.deepcopy(self.guard.capture_observation),images=self.images,
@@ -59,6 +61,7 @@ class SyntheticPortal:
         if data['operation']=='observe':return self.observation()
         if data['operation']=='start':
             assert data['plan_sha256']==self.motion.online_sha
+            self.command='hil_policy_start' if data.get('human_intervention') else 'policy_start'
             self.tick();assert self.motion.mode=='policy'
             return self.observation()
         if data['operation']=='step':
@@ -76,6 +79,7 @@ class SyntheticPortal:
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--algorithm',choices=('autoserl','hilserl'),default='autoserl')
     args=parser.parse_args();configure()
     import jax
     import numpy as np
@@ -84,21 +88,29 @@ def main():
     from .train_online import Training
     if jax.default_backend()!='gpu':raise RuntimeError('This check requires the local GPU')
     with tempfile.TemporaryDirectory(prefix='autoserl-online-synthetic-') as tmp:
-        transport=SyntheticPortal(ROOT,tmp);base=PortalEnv(ROOT,transport)
+        transport=SyntheticPortal(ROOT,tmp)
+        if args.algorithm=='hilserl':
+            from reproduction.hilserl.online_env import HILPortalEnv
+            base=HILPortalEnv(ROOT,transport)
+        else:base=PortalEnv(ROOT,transport)
         selection=base.selection
         with (ROOT/selection['demo_path']).open('rb') as f:demo=pickle.load(f)
         training=Training(args.output,base.preview(),demo,batch_size=4,training_starts=16,capacity=512)
-        env=AutoIntervention(base,np.zeros(6),expert=PortalSignals(),demo_path=ROOT/selection['demo_path'],
-            demo_initial_tcp_pose=selection['demo_initial_tcp_pose'],recover_point0=selection['recover_point0'],
-            recover_point1=selection['recover_point1'],**selection['control_parameters'])
+        env=base
+        if args.algorithm=='autoserl':
+            env=AutoIntervention(base,np.zeros(6),expert=PortalSignals(),demo_path=ROOT/selection['demo_path'],
+                demo_initial_tcp_pose=selection['demo_initial_tcp_pose'],recover_point0=selection['recover_point0'],
+                recover_point1=selection['recover_point1'],**selection['control_parameters'])
         obs,_=env.reset();count=interventions=0;reward=0.
         try:
             for i in range(120):
+                if args.algorithm=='hilserl':transport.axes=[.02 if i%2==0 else 0.,0,0,0,0,0]
                 action=training.sample(obs)
                 nxt,reward,done,truncated,info=env.step(action)
                 t=dict(observations=obs,actions=info['executed_action'],next_observations=nxt,
                        rewards=float(reward),masks=float(not done),dones=bool(done or truncated))
-                training.insert(t,info['auto_intervention']);count+=1;interventions+=int(info['auto_intervention']);obs=nxt
+                intervened=info['human_intervention' if args.algorithm=='hilserl' else 'auto_intervention']
+                training.insert(t,intervened);count+=1;interventions+=int(intervened);obs=nxt
                 if done or truncated:break
             deadline=time.monotonic()+60
             while training.gradient_updates<2 and time.monotonic()<deadline:
@@ -108,10 +120,25 @@ def main():
             assert training.gradient_updates>=2
         finally:
             base.close();training.close()
-        report=dict(status='pass',synthetic=True,robot_io=False,transitions=count,automatic_interventions=interventions,
-            recoveries=env.total_recover_cnt,gradient_updates=training.gradient_updates,
+        assert training.online_steps==count and training.intervention_steps==interventions
+        assert len(training.expert)==len(demo)+interventions
+        frozen_verified=False
+        if args.algorithm=='hilserl':
+            import hashlib
+            from .evaluate_frozen import FrozenPolicy
+            checkpoint=sorted(args.output.glob('checkpoint_*.msgpack'))[-1]
+            frozen_output=args.output/'frozen';frozen_output.mkdir()
+            frozen=FrozenPolicy(frozen_output,obs,{'selected':dict(path=str(checkpoint),sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest())})
+            for _ in range(3):frozen.sample(obs)
+            frozen.close()
+            frozen_verified=json.loads((frozen_output/'weights-verification.json').read_text())['unchanged']
+            assert frozen_verified
+        report=dict(status='pass',synthetic=True,robot_io=False,algorithm_id=args.algorithm,transitions=count,
+            automatic_interventions=interventions if args.algorithm=='autoserl' else 0,
+            human_interventions=interventions if args.algorithm=='hilserl' else 0,frozen_weights_unchanged=frozen_verified,
+            recoveries=getattr(env,'total_recover_cnt',0),gradient_updates=training.gradient_updates,
             initial_demo_episodes=1,terminal_success_label=bool(reward),
-            scope='Actual online action gate, observation encoding, AutoIntervention, replay buffers and GPU learner; synthetic dynamics only')
+            scope='Actual online action gate, observation encoding, intervention source, replay buffers and GPU learner; synthetic dynamics only')
         (args.output/'report.json').write_text(json.dumps(report,indent=2)+'\n')
         print(json.dumps(report),flush=True)
 

@@ -379,9 +379,11 @@ class Recorder:
                             if abs(gripper['gPO']-recovery['gripper_position']) > 3:
                                 raise ValueError('夹爪开度与示范不匹配，请检查插块夹持位置')
                             self.issue(command, now)
-                        elif command == 'policy_start':
+                        elif command in ('policy_start','hil_policy_start'):
                             if not getattr(self,'demo_protocol',None) or not pilot.get('online',{}).get('available'):
-                                raise ValueError('当前会话未提供 AutoSERL 在线控制')
+                                raise ValueError('当前会话未提供在线控制')
+                            if command == 'hil_policy_start' and not pilot['online'].get('human_intervention_v1'):
+                                raise ValueError('NUC 尚未部署 HIL-SERL 人工接管协议')
                             self.issue(command,now)
                         elif command in ('set_home', 'home','set_custom_home','custom_home'):
                             if command == 'home' and not pilot.get('home_set'):
@@ -461,7 +463,7 @@ class Recorder:
         return result
 
     def command(self, command, *, source='operator'):
-        if command not in ('start', 'finish', 'finish_success', 'finish_failure', 'finish_discard', 'set_home', 'home','set_custom_home','custom_home', 'recovery_check', 'policy_start', *PREPARE_ACTIONS):
+        if command not in ('start', 'finish', 'finish_success', 'finish_failure', 'finish_discard', 'set_home', 'home','set_custom_home','custom_home', 'recovery_check', 'policy_start', 'hil_policy_start', *PREPARE_ACTIONS):
             raise ValueError('unknown recorder command')
         if self.done.is_set() or self.get_status().get('fatal'):
             raise ValueError('recorder is stopped')

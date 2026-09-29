@@ -49,7 +49,8 @@ class PortalTransport:
 
 
 class PortalEnv(gym.Env):
-    def __init__(self, root, transport=None):
+    def __init__(self, root, transport=None, *, human_intervention=False):
+        self.human_intervention_enabled = human_intervention
         self.root=Path(root)
         self.selection,self.manifest=load_config(root)
         self.plan=json.loads((self.root/'reproduction/configs/autoserl/fmb_insertion_online_v1.json').read_text())
@@ -90,7 +91,11 @@ class PortalEnv(gym.Env):
         self._stop_pending=True
         # Snapshot the user's setting once per episode; edits apply next round.
         self.episode_time_limit_seconds=training_settings(self.root/'reproduction/runtime')['time_limit_seconds']
-        data=self.transport.request(dict(operation='start',plan_sha256=self.plan_sha))
+        request=dict(operation='start',plan_sha256=self.plan_sha)
+        if self.human_intervention_enabled:request['human_intervention']=True
+        data=self.transport.request(request)
+        if bool(data['pilot']['online'].get('human_intervention_enabled')) != self.human_intervention_enabled:
+            raise ValueError('Online intervention mode mismatch')
         self.index=-1;self.active=True
         self.episode_started=time.monotonic()
         return self.observation(data),dict(synthetic=False,plan_sha256=self.plan_sha)
@@ -110,6 +115,10 @@ class PortalEnv(gym.Env):
         bounded=body/max(1.,float(np.max(np.abs(body))))
         data=self.transport.request(dict(operation='step',index=self.index+1,action=bounded.tolist()))
         online=data['pilot']['online'];result=online['result']
+        if self.human_intervention_enabled and type(result.get('human_intervention')) is not bool:
+            raise ValueError('Missing acknowledged human action provenance')
+        if not self.human_intervention_enabled and result.get('human_intervention'):
+            raise ValueError('Unexpected human intervention during policy-only control')
         if result['index']!=self.index+1:raise ValueError('Wrong action acknowledgement')
         self.index+=1
         reason=result['terminal_reason'] or online.get('reason')
@@ -128,6 +137,8 @@ class PortalEnv(gym.Env):
             time_limit_seconds=self.episode_time_limit_seconds,
             terminal_reason=reason,executed_action=np.asarray(result['actions'],np.float32),
             requested_action=action.astype(np.float32),decision_id=result['decision_id'],
+            human_intervention=bool(result.get('human_intervention',False)),
+            intervention_source=result.get('intervention_source','policy'),
             action_index=self.index,command_id=result['command_id'],duration_seconds=result['duration_seconds'])
         return self.observation(data,result['next_state']),float(success),terminated,truncated,info
 

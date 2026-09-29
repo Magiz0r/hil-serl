@@ -1,4 +1,4 @@
-"""Attended AutoSERL actor and asynchronous pixel-SAC learner on the local portal."""
+"""Shared attended actor and asynchronous pixel-SAC learner on the local portal."""
 import argparse
 import copy
 import fcntl
@@ -154,10 +154,12 @@ def learner_process(output, sample_obs, demo, config, incoming, outgoing, restor
             except Exception:pass
 
 
-def checkpoint_metadata(previous, checkpoint_path, demo_sha256):
+def checkpoint_metadata(previous, checkpoint_path, demo_sha256, *, algorithm='autoserl'):
     """Validate a selected real checkpoint without loading replay images."""
     previous=Path(previous).resolve();checkpoint=Path(checkpoint_path).resolve()
     manifest=json.loads((previous/'manifest.json').read_text())
+    from .provenance import require_algorithm
+    require_algorithm(manifest,algorithm)
     if manifest['synthetic'] or manifest['demo_sha256']!=demo_sha256 or not manifest.get('eligible_for_training',True):
         raise ValueError('Checkpoint must belong to training with the same real single demo')
     candidates=list((previous/'learner').glob('checkpoint_*.msgpack')) or list(previous.glob('checkpoint_*.msgpack'))
@@ -174,12 +176,14 @@ def checkpoint_metadata(previous, checkpoint_path, demo_sha256):
     return checkpoint,int(checkpoint.stem.split('_')[-1]),matches[-1]['online_steps']
 
 
-def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None):
+def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None, algorithm='autoserl'):
     """Restore real trajectories, including earlier runs in a resume chain."""
     previous=Path(previous).resolve();seen=set() if seen is None else seen
     if previous in seen:raise ValueError('Cyclic resume history')
     seen.add(previous)
     manifest=json.loads((previous/'manifest.json').read_text())
+    from .provenance import require_algorithm
+    require_algorithm(manifest,algorithm)
     if not manifest.get('eligible_for_training', True):
         raise ValueError('Evaluation data cannot be resumed as a training run')
     if manifest['synthetic'] or manifest['demo_sha256']!=demo_sha256:
@@ -188,7 +192,7 @@ def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None):
     if manifest.get('resume_from'):
         ancestor=Path(manifest['resume_from'])
         if not ancestor.is_absolute():ancestor=ROOT/ancestor
-        _,_,restored=restore_run(ancestor,demo_sha256,seen,checkpoint_path=manifest.get('resume_checkpoint'))
+        _,_,restored=restore_run(ancestor,demo_sha256,seen,checkpoint_path=manifest.get('resume_checkpoint'),algorithm=algorithm)
     checkpoints=sorted((previous/'learner').glob('checkpoint_*.msgpack')) or sorted(previous.glob('checkpoint_*.msgpack'))
     if not checkpoints:raise ValueError(f'No saved learner checkpoint in {previous}')
     checkpoint=Path(checkpoint_path).resolve() if checkpoint_path else checkpoints[-1]
@@ -200,7 +204,7 @@ def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None):
     flags={}
     for line in events.read_text().splitlines():
         row=json.loads(line)
-        if row['kind']=='step':flags[(row['episode'],row['action_index'])]=row['auto_intervention']
+        if row['kind']=='step':flags[(row['episode'],row['action_index'])]=row['human_intervention' if algorithm=='hilserl' else 'auto_intervention']
     for path in sorted(previous.glob('episode_*.pkl.gz')):
         episode=int(path.name.split('_')[1].split('.')[0])
         with gzip.open(path,'rb') as stream:transitions=pickle.load(stream)
@@ -214,7 +218,7 @@ def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None):
                 transitions[-1]['dones']=True
         restored.extend((t,flags[(episode,i)]) for i,t in enumerate(transitions))
     if checkpoint_path:
-        _,_,count=checkpoint_metadata(previous,checkpoint,demo_sha256)
+        _,_,count=checkpoint_metadata(previous,checkpoint,demo_sha256,algorithm=algorithm)
         if not 0<=count<=len(restored):raise ValueError('Checkpoint replay data is incomplete')
         restored=restored[:count]
         if restored and not restored[-1][0].get('dones',False):
@@ -227,7 +231,7 @@ def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None):
 
 
 class ProcessTraining:
-    def __init__(self, output, sample_obs, demo, *, resume_from=None, resume_checkpoint=None, **config):
+    def __init__(self, output, sample_obs, demo, *, resume_from=None, resume_checkpoint=None, algorithm='autoserl', **config):
         import jax
         import numpy as np
         from .online_env import IMAGE_KEYS
@@ -239,7 +243,7 @@ class ProcessTraining:
         if resume_from:
             from .online_env import load_config
             selection,_=load_config(ROOT)
-            checkpoint,updates,restored=restore_run(resume_from,selection['demo_pickle_sha256'],checkpoint_path=resume_checkpoint)
+            checkpoint,updates,restored=restore_run(resume_from,selection['demo_pickle_sha256'],checkpoint_path=resume_checkpoint,algorithm=algorithm)
             config.update(initial_checkpoint=str(checkpoint),initial_updates=updates)
             self.gradient_updates=updates
         ctx=multiprocessing.get_context('spawn')
@@ -313,8 +317,8 @@ class ProcessTraining:
         if self.error:raise RuntimeError(self.error)
 
 
-def main():
-    parser=argparse.ArgumentParser(description=__doc__)
+def main(*, algorithm='autoserl'):
+    parser=argparse.ArgumentParser(description=('HIL-SERL human takeover baseline; always prepares paused.' if algorithm=='hilserl' else __doc__))
     parser.add_argument('--execute-attended-online',action='store_true',required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--episodes',type=int,default=1)
@@ -326,6 +330,7 @@ def main():
     parser.add_argument('--start-paused',action='store_true')
     parser.add_argument('--continuous',action='store_true',help='Keep models loaded; auto-start after attended custom Home reset')
     args=parser.parse_args()
+    if algorithm=='hilserl':args.continuous=True;args.start_paused=True
     if args.resume_checkpoint and not args.resume_from:parser.error('Checkpoint requires its source run')
     if args.start_paused and not args.continuous:parser.error('Paused preparation requires continuous mode')
     if args.episodes<1 or args.batch_size<2 or args.batch_size%2 or args.training_starts<1:
@@ -337,26 +342,35 @@ def main():
     runtime=ROOT/'reproduction/runtime';runtime.mkdir(exist_ok=True)
     claim=(runtime/'autoserl-actor.lock').open('a')
     fcntl.flock(claim,fcntl.LOCK_EX|fcntl.LOCK_NB)
-    base=PortalEnv(ROOT);selection=base.selection
+    if algorithm=='hilserl':
+        from reproduction.hilserl.online_env import HILPortalEnv
+        base=HILPortalEnv(ROOT)
+    else:base=PortalEnv(ROOT)
+    selection=base.selection
     with (ROOT/selection['demo_path']).open('rb') as f:demo=pickle.load(f)
     # Compile from the real demo's shapes before connecting physical control.
     sample_obs=demo[0]['observations']
-    training=ProcessTraining(args.output,sample_obs,demo,batch_size=args.batch_size,
+    training=ProcessTraining(args.output,sample_obs,demo,algorithm=algorithm,batch_size=args.batch_size,
                       training_starts=args.training_starts,capacity=args.capacity,resume_from=args.resume_from,resume_checkpoint=args.resume_checkpoint,
                       start_paused=args.continuous)
-    env=AutoIntervention(base,np.zeros(6),expert=PortalSignals(),demo_path=ROOT/selection['demo_path'],
-        demo_initial_tcp_pose=selection['demo_initial_tcp_pose'],recover_point0=selection['recover_point0'],
-        recover_point1=selection['recover_point1'],**selection['control_parameters'])
-    if args.resume_from and not args.resume_checkpoint and (args.resume_from/'intervention-state.json').exists():
-        env.forever_no_window_intervention=bool(json.loads((args.resume_from/'intervention-state.json').read_text())['forever_no_window_intervention'])
-    manifest=dict(schema='autoserl_online_run_v1',synthetic=False,initial_demo_episodes=1,
+    env=base
+    if algorithm=='autoserl':
+        env=AutoIntervention(base,np.zeros(6),expert=PortalSignals(),demo_path=ROOT/selection['demo_path'],
+            demo_initial_tcp_pose=selection['demo_initial_tcp_pose'],recover_point0=selection['recover_point0'],
+            recover_point1=selection['recover_point1'],**selection['control_parameters'])
+        if args.resume_from and not args.resume_checkpoint and (args.resume_from/'intervention-state.json').exists():
+            env.forever_no_window_intervention=bool(json.loads((args.resume_from/'intervention-state.json').read_text())['forever_no_window_intervention'])
+    manifest=dict(schema=f'{algorithm}_online_run_v1',algorithm_id=algorithm,synthetic=False,initial_demo_episodes=1,
         demo_path=selection['demo_path'],demo_sha256=selection['demo_pickle_sha256'],
         online_plan=base.plan,online_plan_sha256=base.plan_sha,image_preprocessing=base.preprocessing,
         setup='FR3 Robotiq ZED; attended manual reset and SpaceMouse success/abort labels',
-        algorithm='adapted AutoIntervention plus asynchronous pixel SAC, 50/50 expert/online, CTA=2',
+        algorithm=('SpaceMouse human takeover' if algorithm=='hilserl' else 'adapted AutoIntervention')+' plus asynchronous pixel SAC, 50/50 expert/online, CTA=2',
         deviations='existing joint guards; configured contact termination; bounded local task workspace; measured action timing',
         resume_from=str(args.resume_from.resolve()) if args.resume_from else None,
         xla_flags=os.environ.get('XLA_FLAGS',''))
+    manifest['human_intervention']=algorithm=='hilserl'
+    manifest['reward_source']='operator labels; no learned reward classifier'
+    manifest['human_action_selection']='at acknowledged decision boundaries; release to policy on neutral input'
     manifest['continuous']=args.continuous
     manifest['contact_stop_mode']=base.plan.get('contact_stop_mode','force_limit')
     manifest['unlabelled_stop_outcome']='pending' if args.continuous else 'legacy_noncontinuous'

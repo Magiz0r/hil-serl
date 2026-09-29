@@ -282,7 +282,7 @@ def main():
     parser.add_argument('--port',type=int,default=8765)
     parser.add_argument('--tailscale',action='store_true')
     parser.add_argument('--connect',action='store_true',help='explicitly attempt attended controller startup')
-    parser.add_argument('--autoserl-demo',action='store_true',help='opt-in AutoSERL action journal and reference compliance')
+    parser.add_argument('--autoserl-demo','--rl',action='store_true',help='opt-in AutoSERL action journal and reference compliance')
     args=parser.parse_args()
     os.umask(0o077)
     directory=ROOT/'reproduction/runtime/capture-console';directory.mkdir(parents=True,exist_ok=True)

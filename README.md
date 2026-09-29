@@ -1,6 +1,6 @@
 # HIL-SERL: Precise and Dexterous Robotic Manipulation via Human-in-the-Loop Reinforcement Learning
 
-> **本 Fork 的 FR3 工作入口：** [复现总览与目录导航](reproduction/README.md) · [采集网页操作手册](reproduction/docs/CAPTURE_CONSOLE.md) · [AutoSERL 训练与评估](reproduction/autoserl/README.md)。已接入真实采集、在线训练、模型续训与冻结评估；当前独立策略成功率为 1/10，来源及局限见 [实验结果](reproduction/autoserl/RESULTS.md)。下方保留官方 HIL-SERL 说明。
+> **本 Fork 的 FR3 工作入口：** [复现总览与目录导航](reproduction/README.md) · [采集网页操作手册](reproduction/docs/CAPTURE_CONSOLE.md) · [AutoSERL 训练与评估](reproduction/autoserl/README.md) · [HIL-SERL 人工接管基线](reproduction/hilserl/README.md)（离线完成，NUC 待部署验证）。已接入真实采集、在线训练、模型续训与冻结评估；当前独立策略成功率为 1/10，来源及局限见 [实验结果](reproduction/autoserl/RESULTS.md)。下方保留官方 HIL-SERL 说明。
 
 本实验室已配置环境中的常用入口，在仓库根目录运行：
 

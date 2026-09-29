@@ -8,7 +8,7 @@
 | 连接预检 | `readonly_preflight.py`、`validate_hold_launch.py` | Desk、容器、源码摘要与 launch 配置检查 |
 | 主机与 ROS 入口 | `run_upward_trial.py`、`upward_trial.py`、`launch_hold.sh`、`fr3_hold.launch` | 主机容器管理、遥操作循环和控制器启动 |
 | 动作与门控 | `manual_guard.py`、`translation_guard.py`、`fr3_kinematics.py`、`pilot_motion.py` | 输入、状态、运动计算与 Start/Stop 门控 |
-| AutoSERL | `autoserl_capture.py`、`online_motion.py`、`recovery_check.py` | 固定夹爪示范动作日志、已确认策略动作、单次回退重放诊断 |
+| 在线 RL | `autoserl_capture.py`、`online_motion.py`、`recovery_check.py` | 固定夹爪示范动作日志、已确认策略 / HIL 人工动作、单次回退重放诊断 |
 | 状态传输 | `latest_jsonl.py` | 读取最新完整状态行；动作与按钮证据仍逐条保留 |
 | DROID / 自定义 Home | `official_home.py`、`custom_home.py` | 七关节目标、轨迹预检、插件切换、持久自定义目标 |
 | Home 插件 | `home_controller.cpp`、`home_profile.py`、`home_profile.h`、`home_profile.json` | ROS 关节位置轨迹跟踪和共用五次多项式参数 |
@@ -20,3 +20,6 @@
 `*_artifacts.json` 是当前已部署构建的清单，随源码保存。它们包含本机安装前缀和文件哈希，不包含二进制；新 clone 不代表 NUC 已有相同产物。重建后应同步对应清单，不能把历史哈希直接当作新构建的结果。`wheels/`、本地 catkin `build/`、`devel/`、`install/` 被 Git 忽略。
 
 机械臂部署核对 `source-sha256.json`，夹爪独立核对 `gripper-source-sha256.json`。Python/C++ 源文件的位置和内容与摘要有关；仓库文档整理不移动这些文件，也不重新部署或重启控制器。
+
+HIL-SERL 增加人工接管协议；2026-09-29 仅离线验证，NUC 尚未部署。
+更新单个模块与摘要清单的方法见 [HIL-SERL 手册](../hilserl/README.md)。

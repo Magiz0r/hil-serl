@@ -40,6 +40,8 @@ class ButtonTail:
 class ContinuousRunner:
     def __init__(self,base,env,training,output,runtime=RUNTIME,*,start_paused=False):
         self.base,self.env,self.training=base,env,training
+        self.algorithm_id=getattr(base,'algorithm_id','autoserl')
+        self.intervention_source='policy'
         self.output=Path(output);self.runtime=Path(runtime);self.session_id=uuid.uuid4().hex
         self.episode=0;self.sequence=0;self.enabled=not start_paused;self.label=None;self.pending=None
         self.ever_started=False
@@ -51,7 +53,7 @@ class ContinuousRunner:
 
     def set_status(self,phase,**extra):
         with self.state_lock:
-            self.state=dict(session_id=self.session_id,episode=self.episode,phase=phase,
+            self.state=dict(algorithm_id=self.algorithm_id,intervention_source=self.intervention_source,session_id=self.session_id,episode=self.episode,phase=phase,
                 enabled=self.enabled,can_label=self.have_episode,label=self.label,
                 steps=len(self.trajectory)+(self.pending is not None),reason=self.reason,
                 gradient_updates=self.training.gradient_updates)
@@ -60,9 +62,14 @@ class ContinuousRunner:
             self.state.update(output=str(self.output.resolve()),pending_label=awaiting_label,
                 episode_return=None if awaiting_label else 1. if self.label=='success' else 0. if self.label=='failure' else
                     sum(t.get('rewards',0.) for t in self.trajectory)+(self.pending[0].get('rewards',0.) if self.pending else 0.),
-                automatic_interventions=sum(self.interventions)+(int(self.pending[1]) if self.pending else 0))
+                **self.intervention_counts())
             self.state.update(extra)
             atomic_json(self.runtime/'training-status.json',dict(self.state,heartbeat_unix=time.time()))
+
+    def intervention_counts(self):
+        count=sum(self.interventions)+(int(self.pending[1]) if self.pending else 0)
+        return dict(automatic_interventions=count if self.algorithm_id=='autoserl' else 0,
+                    human_interventions=count if self.algorithm_id=='hilserl' else 0)
 
     def publish_loop(self):
         while not self.heartbeat_stop.is_set():
@@ -104,7 +111,8 @@ class ContinuousRunner:
         self.write_episode(self.output/f'episode_{self.episode:04d}.pkl.gz',labelled)
         atomic_json(self.output/f'episode_{self.episode:04d}.json',dict(episode=self.episode,
             outcome=self.label or 'pending',pending_final_replay_insert=True,reason=self.reason,transitions=len(labelled),
-            time_limit_seconds=getattr(self.base,'episode_time_limit_seconds',0)))
+            time_limit_seconds=getattr(self.base,'episode_time_limit_seconds',0),
+            algorithm_id=self.algorithm_id,**self.intervention_counts()))
 
     @staticmethod
     def write_episode(path,trajectory):
@@ -126,15 +134,16 @@ class ContinuousRunner:
         result=dict(episode=self.episode,outcome=self.label,
             time_limit_seconds=getattr(self.base,'episode_time_limit_seconds',0),
             label_source='operator',reason=self.reason,
-            transitions=len(self.trajectory),automatic_interventions=sum(self.interventions),
-            recoveries=self.env.total_recover_cnt,return_=sum(t['rewards'] for t in self.trajectory))
+            transitions=len(self.trajectory),algorithm_id=self.algorithm_id,**self.intervention_counts(),
+            recoveries=getattr(self.env,'total_recover_cnt',0),return_=sum(t['rewards'] for t in self.trajectory))
         atomic_json(self.output/f'episode_{self.episode:04d}.json',result)
         self.training.event('episode_end',**result);self.training.save()
-        # Match upstream intervention termination when a delayed positive label arrives.
-        if self.label=='success' and self.env.intervention_cnt<self.env.intervention_termination_step_threshold:
-            self.env.forever_no_window_intervention=True
-        atomic_json(self.output/'intervention-state.json',dict(
-            forever_no_window_intervention=self.env.forever_no_window_intervention))
+        if self.algorithm_id=='autoserl':
+            # Human takeover must remain available after any number of successes.
+            if self.label=='success' and self.env.intervention_cnt<self.env.intervention_termination_step_threshold:
+                self.env.forever_no_window_intervention=True
+            atomic_json(self.output/'intervention-state.json',dict(
+                forever_no_window_intervention=self.env.forever_no_window_intervention))
         print('Saved continuous episode: '+json.dumps(result),flush=True)
         self.have_episode=False;self.episode+=1
         return True
@@ -195,7 +204,9 @@ class ContinuousRunner:
         self.training.event('episode_start',episode=self.episode,command_id=self.last_command)
         try:
             while True:
-                self.poll_commands();self.set_status('running',message='策略与自动干预运行中；左键成功，右键失败')
+                self.poll_commands();self.set_status('running',message=(
+                    '策略运行中；移动 SpaceMouse 接管，回中交还；左键成功，右键失败'
+                    if self.algorithm_id=='hilserl' else '策略与自动干预运行中；左键成功，右键失败'))
                 if not self.enabled or self.label is not None:break
                 action=self.training.sample(obs)
                 nxt,reward,done,truncated,info=self.env.step(action)
@@ -204,9 +215,12 @@ class ContinuousRunner:
                     self.trajectory.append(transition);self.interventions.append(intervened)
                 transition=dict(observations=obs,actions=np.asarray(info['executed_action'],np.float32),
                     next_observations=nxt,rewards=float(reward),masks=float(not done),dones=bool(done or truncated))
-                self.pending=(transition,info['auto_intervention']);obs=nxt
+                human=bool(info.get('human_intervention',False));auto=bool(info.get('auto_intervention',False))
+                self.intervention_source='human' if human else 'automatic' if auto else 'policy'
+                self.pending=(transition,human if self.algorithm_id=='hilserl' else auto);obs=nxt
                 self.training.event('step',episode=self.episode,action_index=info['action_index'],
-                    auto_intervention=info['auto_intervention'],recoveries=info['auto_recovery_count'],reward=float(reward),
+                    auto_intervention=auto,human_intervention=human,intervention_source=self.intervention_source,
+                    recoveries=info.get('auto_recovery_count',0),reward=float(reward),
                     done=bool(done),truncated=bool(truncated),reason=info['terminal_reason'],duration_seconds=info['duration_seconds'])
                 self.reason=info['terminal_reason']
                 if reward:self.label='success'

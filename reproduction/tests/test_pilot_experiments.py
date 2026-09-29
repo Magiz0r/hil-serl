@@ -90,3 +90,31 @@ def test_unlabelled_protective_stop_is_pending_not_a_failed_return(tmp_path):
     assert data['summary']['excluded_episodes']==0
     assert data['episodes'][1]['pending_label'] and not data['episodes'][1]['valid']
     assert data['episodes'][1]['return_'] is None
+
+
+@pytest.mark.parametrize('mode',['fresh','resume','evaluate_unassisted'])
+def test_hil_models_are_isolated_and_preparation_stays_paused(tmp_path,mode):
+    store,root=fixture_store(tmp_path)
+    auto=store.catalog()['runs'][0]['checkpoints'][0]['id']
+    hil=root.parent/'hil';write(hil/'manifest.json',dict(schema='hilserl_online_run_v1',synthetic=False,demo_sha256='demo'))
+    (hil/'checkpoint_00000005.msgpack').write_bytes(b'hil')
+    model=next(r for r in store.catalog(force=True)['runs'] if r['algorithm_id']=='hilserl')['checkpoints'][0]
+    with pytest.raises(ValueError,match='baseline'):store.model(auto,'hilserl')
+    spawn=Mock(return_value=SimpleNamespace(pid=os.getpid(),poll=lambda:None,returncode=None))
+    manager=ExperimentManager(store,popen=spawn)
+    manager.prepare(dict(action='prepare',algorithm='hilserl',mode=mode,model_id=None if mode=='fresh' else model['id'],episodes=10))
+    argv=spawn.call_args.args[0]
+    assert argv[2].startswith('reproduction.hilserl.') and '--start-at-home' not in argv
+    assert '/hilserl-web/' in str(manager.job['output'])
+    if mode!='evaluate_unassisted':assert '--start-paused' in argv
+    with pytest.raises(ValueError,match='无干预'):
+        manager.prepare(dict(action='prepare',algorithm='hilserl',mode='evaluate',model_id=model['id'],episodes=10))
+
+
+def test_hil_metrics_keep_human_separate_from_automatic(tmp_path):
+    store,root=fixture_store(tmp_path)
+    write(root/'manifest.json',dict(schema='hilserl_online_run_v1',synthetic=False,demo_sha256='demo'))
+    write(root/'episode_0000.json',dict(episode=0,outcome='success',transitions=10,human_interventions=3,automatic_interventions=0))
+    data=store.metrics(store.catalog()['runs'][0]['id'])
+    assert data['algorithm_id']=='hilserl'
+    assert data['summary']['human_fraction']==.3 and data['summary']['automatic_fraction']==0

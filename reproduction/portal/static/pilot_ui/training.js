@@ -15,21 +15,27 @@ const PilotTrainingUI = (() => {
     if(!rows.length)element.add(new Option(placeholder,''));
     if(rows.some(row=>row.id===before))element.value=before;
   }
+  const algorithm=()=>get('training-algorithm').value;
+  const selectedRuns=()=>catalog.runs.filter(r=>(r.algorithm_id || 'autoserl')===algorithm());
   function checkpoints(){
     const run=catalog.runs.find(r=>r.id===get('model-run').value);
     options(get('model-checkpoint'),(run?.checkpoints || []).map(m=>({id:m.id,label:`更新 ${m.updates.toLocaleString()} · ${new Date(m.saved_unix*1000).toLocaleString()}`})),'暂无可选模型');
     controls();
   }
   function controls(){
-    const mode=get('training-mode').value, job=state.experiment || {};
+    const hil=algorithm()==='hilserl',job=state.experiment || {};
+    const assisted=get('training-mode').querySelector('[value="evaluate"]');assisted.disabled=hil;assisted.hidden=hil;
+    if(hil && get('training-mode').value==='evaluate')get('training-mode').value='evaluate_unassisted';
+    const mode=get('training-mode').value;
     get('model-selection').hidden=mode==='fresh';get('evaluation-settings').hidden=!['evaluate','evaluate_unassisted'].includes(mode);
     set('training-mode-help',({fresh:'沿用当前 1 条 demo，初始化新模型和新训练记录。旧记录保留。',resume:'加载所选模型及其保存时已有的数据，开启新一段训练；自动干预重新启用。',evaluate:'固定所选模型参数，按指定轮数评估；保留自动干预，结果单独保存。',evaluate_unassisted:'冻结所选模型，关闭示范引导和自动回退重放，测试策略独立表现。仍需人工标记成功 / 失败并复位。'})[mode]);
-    for(const id of ['training-mode','model-run','model-checkpoint','evaluation-episodes'])get(id).disabled=pending || !!job.active;
+    if(hil)set('training-mode-help',mode==='evaluate_unassisted'?'冻结 HIL-SERL 模型，关闭人工接管和自动恢复，测试独立成功率。':mode==='resume'?'恢复 HIL-SERL 模型和当时的数据；SpaceMouse 随时可接管。':'当前 1 条 demo 初始化独立 HIL-SERL 模型；移动 SpaceMouse 接管，回中交还策略。不启用自动恢复。');
+    for(const id of ['training-algorithm','training-mode','model-run','model-checkpoint','evaluation-episodes'])get(id).disabled=pending || !!job.active;
     const selectionOK=mode==='fresh' || !!get('model-checkpoint').value;
     get('model-prepare').disabled=!online || !loaded || pending || job.can_prepare!==true || !selectionOK || !!state.recording;
     get('model-end').disabled=!online || pending || !job.managed || job.phase==='stopping';
     set('model-job-state',({idle:'未启动',loading:'加载模型中',ready:'已准备',stopping:'保存并退出中',ended:'已结束',error:'启动失败',external:'其他训练进程运行中'})[job.phase] || '等待网页状态');
-    set('model-job-detail',job.model_label?`${labels[job.mode] || ''} · ${job.model_label}`:'');
+    set('model-job-detail',job.model_label?`${(job.algorithm_id || 'autoserl').toUpperCase()} · ${labels[job.mode] || ''} · ${job.model_label}`:'');
     if(job.error)set('training-error',job.error);
   }
   async function loadCatalog(){
@@ -37,10 +43,10 @@ const PilotTrainingUI = (() => {
     loading=true;
     try{
       catalog=await PilotAPI.models();loaded=true;set('training-error','');
-      options(get('model-run'),catalog.runs.filter(r=>r.checkpoints.length).map(r=>({id:r.id,label:r.name})),'暂无兼容的训练模型');
+      options(get('model-run'),selectedRuns().filter(r=>r.checkpoints.length).map(r=>({id:r.id,label:r.name})),'暂无兼容的训练模型');
       const previousHistory=get('training-history').value;
-      options(get('training-history'),catalog.runs.map(r=>({id:r.id,label:`${r.kind==='evaluation'?'评估':'训练'} · ${r.name}`})),'暂无训练记录');
-      if(!previousHistory){const recent=catalog.runs.find(r=>r.kind==='training' && r.checkpoints.length);if(recent)get('training-history').value=recent.id;}
+      options(get('training-history'),selectedRuns().map(r=>({id:r.id,label:`${r.kind==='evaluation'?'评估':'训练'} · ${r.name}`})),'暂无训练记录');
+      if(!previousHistory){const recent=selectedRuns().find(r=>r.kind==='training' && r.checkpoints.length);if(recent)get('training-history').value=recent.id;}
       set('model-demo',`初始示范：${catalog.initial_demo_episodes} 条 · ${catalog.demo_name}`);
       checkpoints();follow();await loadMetrics(true);
     }catch(error){set('training-error','模型列表读取失败：'+error.message);}
@@ -48,7 +54,7 @@ const PilotTrainingUI = (() => {
   }
   function follow(){
     const rid=state.experiment?.run_id;
-    if(get('training-follow').checked && rid && catalog.runs.some(r=>r.id===rid))get('training-history').value=rid;
+    if(get('training-follow').checked && rid && selectedRuns().some(r=>r.id===rid))get('training-history').value=rid;
   }
   function svgElement(name,attrs={},text=null){
     const el=document.createElementNS('http://www.w3.org/2000/svg',name);
@@ -76,7 +82,9 @@ const PilotTrainingUI = (() => {
     const s=data.summary;
     set('training-success-total',`${s.successes} / ${s.episodes}`);
     set('training-success-recent',`${s.last10_successes} / ${s.last10_count}`);
-    set('training-mean-return',fmt(s.mean_return));set('training-auto-fraction',pct(s.automatic_fraction));
+    const hil=data.algorithm_id==='hilserl';
+    set('training-intervention-label',hil?'人工干预动作':'自动干预动作');set('training-intervention-column',hil?'人工干预':'自动干预');
+    set('training-mean-return',fmt(s.mean_return));set('training-auto-fraction',pct(hil?s.human_fraction:s.automatic_fraction));
     const selected=catalog.runs.find(r=>r.id===data.run_id);
     set('training-data-note',`${selected?.kind==='evaluation'?'冻结评估':'在线训练'} · ${s.transitions.toLocaleString()} 步 · ${s.pending_episodes || 0} 轮待标记 · ${s.excluded_episodes} 轮中断 / 排除。待标记回合不计成功率和平均 Return。最多显示最近 1000 轮。`);
     const valid=data.episodes.filter(e=>e.valid);
@@ -86,8 +94,8 @@ const PilotTrainingUI = (() => {
     const last=data.learner.at(-1);
     set('learner-summary',last?`更新 ${last.updates.toLocaleString()} · 在线数据 ${last.online_steps ?? '—'} 步 · Actor Loss ${fmt(last.actor_loss,4)} · 策略熵 ${fmt(last.entropy,3)}`:'暂无学习日志；冻结评估不更新参数。');
     const rows=data.episodes.slice().reverse().map(e=>{
-      const tr=document.createElement('tr');
-      for(const text of [e.episode,e.pending_label?'待标记':e.valid?(e.outcome==='success'?'成功':'失败'):'排除',fmt(e.return_,0),e.steps,e.automatic_interventions==null?'—':`${e.automatic_interventions} (${pct(e.steps?e.automatic_interventions/e.steps:0)})`,reasonLabels[e.reason] || e.reason || '人工停止',e.pending_label?'等待人工标记':!e.valid?'中断，不计成功率':e.provisional?'可补标':'已保存']){const td=document.createElement('td');td.textContent=text;tr.append(td);}
+      const tr=document.createElement('tr'),count=hil?e.human_interventions:e.automatic_interventions;
+      for(const text of [e.episode,e.pending_label?'待标记':e.valid?(e.outcome==='success'?'成功':'失败'):'排除',fmt(e.return_,0),e.steps,count==null?'—':`${count} (${pct(e.steps?count/e.steps:0)})`,reasonLabels[e.reason] || e.reason || '人工停止',e.pending_label?'等待人工标记':!e.valid?'中断，不计成功率':e.provisional?'可补标':'已保存']){const td=document.createElement('td');td.textContent=text;tr.append(td);}
       return tr;
     });
     get('training-episodes').replaceChildren(...rows);get('training-empty').hidden=!!rows.length;get('training-export').disabled=!rows.length;
@@ -105,7 +113,7 @@ const PilotTrainingUI = (() => {
     if(pending)return;pending=true;controls();set('training-error','');
     try{
       const mode=get('training-mode').value;
-      await PilotAPI.experiment(action==='stop'?{action}:{action,mode,model_id:mode==='fresh'?null:get('model-checkpoint').value,episodes:Number(get('evaluation-episodes').value)});
+      await PilotAPI.experiment(action==='stop'?{action}:{action,mode,algorithm:algorithm(),model_id:mode==='fresh'?null:get('model-checkpoint').value,episodes:Number(get('evaluation-episodes').value)});
       set('model-job-detail',action==='prepare'?'正在加载模型；加载完成后保持暂停。':'正在保存并退出…');
       await refresh();
     }catch(error){set('training-error',error.message);}
@@ -113,6 +121,7 @@ const PilotTrainingUI = (() => {
   }
   function render(s,isOnline){
     state=s;online=isOnline;
+    if(s.experiment?.active && s.experiment.algorithm_id && algorithm()!==s.experiment.algorithm_id){get('training-algorithm').value=s.experiment.algorithm_id;loaded=false;}
     const visible=!!s.runtime?.autoserl_demo || !!s.experiment;
     get('training-workbench').hidden=!visible;
     if(!visible || PilotAPI.isDemo)return;
@@ -127,7 +136,7 @@ const PilotTrainingUI = (() => {
     set('training-live-step',active?`${t.episode+1} / ${t.steps ?? 0}`:'—');
     set('training-live-updates',active?(t.frozen?'冻结 · 0':Number(t.gradient_updates || 0).toLocaleString()):'—');
     set('training-live-phase',active?(t.frozen?'冻结评估':'在线训练'):'未运行');
-    set('training-live-model',s.experiment?.model_label || '');set('training-live-message',(t.message || '准备任务后在这里开始。')+(t.phase==='running'?` · 本轮${t.time_limit_seconds?t.time_limit_seconds+' 秒上限':'不限时'}`:''));
+    set('training-live-model',s.experiment?.model_label || '');set('training-live-message',(t.message || '准备任务后在这里开始。')+(t.phase==='running'?` · 控制来源：${({human:'人工',automatic:'自动恢复',policy:'策略'})[t.intervention_source] || '策略'}`:'')+(t.phase==='running'?` · 本轮${t.time_limit_seconds?t.time_limit_seconds+' 秒上限':'不限时'}`:''));
     get('training-run-toggle').disabled=!active || (!t.enabled && !s.ready);
     set('training-run-toggle',t.enabled?'暂停运行':'开始运行');
     for(const id of ['training-mark-success','training-mark-failure'])get(id).disabled=!active || !t.can_label;
@@ -149,6 +158,7 @@ const PilotTrainingUI = (() => {
       catch(error){set('training-error',error.message);}
       finally{limitBusy=false;get('training-time-save').disabled=!online;}
     });
+    get('training-algorithm').addEventListener('change',()=>{requestId++;metrics=null;chosenRun='';get('training-episodes').replaceChildren();get('training-export').disabled=true;for(const id of ['training-success-total','training-success-recent','training-mean-return','training-auto-fraction'])set(id,'—');for(const id of ['chart-return','chart-success','chart-q','chart-loss'])chart(id,[]);loadCatalog();controls();});
     get('models-refresh').addEventListener('click',loadCatalog);
     get('training-mode').addEventListener('change',controls);get('model-run').addEventListener('change',checkpoints);
     get('model-checkpoint').addEventListener('change',controls);
@@ -159,7 +169,7 @@ const PilotTrainingUI = (() => {
     get('training-follow').addEventListener('change',()=>{follow();loadMetrics(true);});
     get('training-export').addEventListener('click',()=>{
       if(!metrics)return;
-      const rows=[['episode','outcome','return','steps','automatic_interventions','stop_reason','valid','provisional'],...metrics.episodes.map(e=>[e.episode,e.outcome,e.return_,e.steps,e.automatic_interventions,e.reason,e.valid,e.provisional])];
+      const rows=[['episode','outcome','return','steps','automatic_interventions','human_interventions','stop_reason','valid','provisional'],...metrics.episodes.map(e=>[e.episode,e.outcome,e.return_,e.steps,e.automatic_interventions,e.human_interventions,e.reason,e.valid,e.provisional])];
       const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n');
       const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=metrics.name+'-episodes.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     });

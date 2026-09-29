@@ -34,7 +34,7 @@ window.fetch=async(path,options={})=>{
  if(path==='/experiments'){
   const data=JSON.parse(options.body);testModelCommands.push(data);
   if(data.action==='prepare'){
-   testState.experiment={phase:'ready',active:true,managed:true,can_prepare:false,run_id:'run1',mode:data.mode,model_label:data.model_id || 'fresh'};
+   testState.experiment={phase:'ready',active:true,managed:true,can_prepare:false,run_id:'run1',mode:data.mode,algorithm_id:data.algorithm || 'autoserl',model_label:data.model_id || 'fresh'};
    testState.training={available:true,session_id:'prepared',episode:0,phase:'paused',enabled:false,can_label:false,steps:0,gradient_updates:0,episode_return:0,message:'已准备，保持暂停'};
   }else{testState.experiment={phase:'ended',active:false,can_prepare:true};testState.training.available=false;}
   return {ok:true,json:async()=>({accepted:true})};
@@ -201,6 +201,30 @@ check(byId('home').disabled && byId('start').disabled && byId('gripper-open').di
 check(!byId('finish').disabled,'online Stop unavailable');
 byId('finish').click();await settle();
 check(testCommands[0]==='finish' && current.pilot.mode==='locked','online Stop did not reach gate');
+''')
+
+    def test_hil_algorithm_filters_models_and_shows_human_metrics(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.experiment={phase:'idle',active:false,can_prepare:true};
+testModels.runs.push({id:'hil1',algorithm_id:'hilserl',name:'human-baseline',kind:'training',checkpoints:[{id:'hil-model',updates:10,saved_unix:1790294046}]});
+await settle(1200);
+byId('training-algorithm').value='hilserl';byId('training-algorithm').dispatchEvent(new Event('change'));await settle(1200);
+check(byId('model-run').options.length===1 && byId('model-run').value==='hil1','HIL catalog contains AutoSERL model');
+check(byId('training-mode').querySelector('[value="evaluate"]').disabled,'automatic recovery offered for HIL');
+byId('training-mode').value='resume';byId('training-mode').dispatchEvent(new Event('change'));
+byId('model-prepare').click();await settle(1200);
+check(testModelCommands[0].algorithm==='hilserl' && testModelCommands[0].model_id==='hil-model','wrong HIL model request');
+check(testCommands.length===0 && !testState.training.enabled,'preparation started robot');
+check(byId('training-algorithm').disabled,'algorithm can change during task');
+Object.assign(testTrainingData,{run_id:'hil1',algorithm_id:'hilserl'});
+testTrainingData.summary.human_fraction=.3;testTrainingData.episodes[0].human_interventions=3;
+byId('training-history').value='hil1';byId('training-history').dispatchEvent(new Event('change'));await settle(1200);
+check(byId('training-intervention-label').textContent.includes('人工'),'human metric labeled automatic');
+check(byId('training-auto-fraction').textContent==='30.0%','wrong human fraction');
+testState.pilot.mode='policy';testState.pilot.online={available:true,phase:'active',human_intervention_enabled:true};await settle();
+check(byId('status').textContent.includes('接管'),'HIL takeover instructions missing');
+check(!byId('finish').disabled,'HIL Stop disabled');
 ''')
 
     def test_recovery_check_starts_no_episode_and_keeps_stop_available(self):

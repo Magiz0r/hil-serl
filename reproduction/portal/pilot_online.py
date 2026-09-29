@@ -52,22 +52,30 @@ class OnlineAPI:
                 return dict(accepted=True)
             if op == 'observe' and set(data)=={'operation'}:
                 return self.snapshot()
-            if op == 'start' and set(data)=={'operation','plan_sha256'}:
+            if op == 'start' and set(data) in ({'operation','plan_sha256'}, {'operation','plan_sha256','human_intervention'}):
                 obs = self.snapshot(); p=obs['pilot']
+                human = data.get('human_intervention', False)
+                if type(human) is not bool:raise ValueError('Invalid intervention mode')
+                if human and not p['online'].get('human_intervention_v1'):
+                    raise ValueError('NUC 尚未部署 HIL-SERL 人工接管协议')
                 if p['online']['plan_sha256']!=data['plan_sha256']:
                     raise ValueError('Online plan mismatch or arm not stopped')
                 if p['mode']=='policy' and p['online']['index']==-1 and p['command_id']!=self.command_id:
+                    if bool(p['online'].get('human_intervention_enabled')) != human:
+                        raise ValueError('Online intervention mode mismatch')
                     self.command_id=p['command_id'];self.index=-1
                     return obs
                 if p['mode']!='locked':raise ValueError('Online episode is already active')
                 if self.recorder.episode or self.recorder.pending:
                     raise ValueError('Recorder is busy')
                 previous_id=p['command_id']
-                self.recorder.command('policy_start')
+                self.recorder.command('hil_policy_start' if human else 'policy_start')
                 deadline=time.monotonic()+3.
                 while time.monotonic()<deadline:
                     obs=self.snapshot();p=obs['pilot']
                     if p['mode']=='policy' and p['command_id']>previous_id:
+                        if bool(p['online'].get('human_intervention_enabled')) != human:
+                            raise ValueError('Online intervention mode mismatch')
                         self.command_id=p['command_id'];self.index=-1
                         return obs
                     error=self.recorder.get_status().get('last_command_error')

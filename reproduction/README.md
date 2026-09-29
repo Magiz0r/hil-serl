@@ -4,17 +4,18 @@
 
 ## 当前进展
 
-整理于 **2026-09-29**，最近实机实验为 2026-09-26 UTC（本地 09-25）。日常入口为 FR3 · Capture Console，支持双视角采集、Task / Layout、人工标签、Home、夹爪准备，以及 AutoSERL 从头训练、选择模型续训、冻结评估和数据分析。实时服务状态请看网页；文档中的日期表示验证时间。
+整理于 **2026-09-29**，最近实机实验为 2026-09-26 UTC（本地 09-25）。日常入口为 FR3 · Capture Console，支持双视角采集、Task / Layout、人工标签、Home、夹爪准备，以及 AutoSERL / HIL-SERL 从头训练、选择模型续训、冻结评估和数据分析。实时服务状态请看网页；文档中的日期表示验证时间。
 
 | 项目 | 已验证内容 |
 | --- | --- |
 | Python / GPU | 独立 Conda `hilserl`，Python 3.10.21，JAX 0.4.35 / jaxlib 0.4.34，RTX 4090 计算通过 |
-| 离线功能 | 2026-09-29 完整回归 307 项通过，覆盖采集、HTTP、Chrome 界面、Home、夹爪、续训和评估；使用模拟硬件 |
+| 离线功能 | 2026-09-29 完整回归 328 项通过，覆盖采集、HTTP、Chrome 界面、Home、夹爪、续训和评估；使用模拟硬件 |
 | 相机 | 外部视角已切至第三台 ZED 2i（USB `3.4.1`），腕部仍为 ZED-M；两路 15 FPS 读取、约 10 Hz 记录 |
 | 夹爪 | Robotiq 2F-85 USB-RS485；FC03 通过，已激活且无错误；左右键开合、接触停止和双键退出实测通过 |
 | 机械臂 | FR3 系统 5.9.2；保持、六轴平移和旋转实测，最后一轮无机器人错误 |
 | 人工输入 | SpaceMouse Wireless BT USB `256f:c63a`；无需按住左键，双键退出；`--with-gripper` 可启用左右键开合 |
 | 数据 | 当前一条 FMB 成功示范为 171 条 transition，恢复点 60/90；旧 147 条示范另存历史 |
+| HIL-SERL | 人工接管基线离线完成；GPU 合成 120 步、60 个人工干预、冻结权重校验通过；NUC 尚未部署，真机待验证 |
 | AutoSERL | 当前续训 20 轮成功 14/20，后十轮 10/10 且自动干预占 18.4%；冻结模型无干预评估 1/10，独立策略尚不稳定 |
 | 模型与分析 | 网页选择 checkpoint、Return / 成功率 / 干预率 / Loss 曲线与 CSV；独立 W&B 数值同步；训练累积 3258 条 online，最终 checkpoint 6772 |
 
@@ -22,13 +23,14 @@
 
 ## 目录与入口
 
-普通采集启动：`bash ~/hil-serl/start_capture.sh`；当前 AutoSERL 使用 `bash ~/hil-serl/start_capture.sh --autoserl-demo`；完整关闭：`bash ~/hil-serl/stop_capture.sh`。启动不开始录制、Home 或策略动作；训练区“准备任务”加载模型后仍暂停。仅查看网页和相机可加 `--web-only`。详见 [Capture Console 说明](docs/CAPTURE_CONSOLE.md) 和 [AutoSERL 操作手册](autoserl/README.md)。
+普通采集启动：`bash ~/hil-serl/start_capture.sh`；AutoSERL / HIL-SERL 使用 `bash ~/hil-serl/start_capture.sh --rl`（兼容 `--autoserl-demo`）；完整关闭：`bash ~/hil-serl/stop_capture.sh`。启动不开始录制、Home 或策略动作；训练区“准备任务”加载模型后仍暂停。仅查看网页和相机可加 `--web-only`。详见 [Capture Console 说明](docs/CAPTURE_CONSOLE.md) 和 [AutoSERL 操作手册](autoserl/README.md)。
 
 ```text
 reproduction/
 ├── portal/       # 网页、录制、实验管理；static/ 保存前端
 ├── desktop/      # SpaceMouse 与夹爪通信桥
 ├── autoserl/     # 示范导出、自动干预、训练、评估及专项检查
+├── hilserl/      # 人工接管训练与独立冻结评估入口
 ├── nuc/          # NUC 控制源码、构建与部署清单
 ├── tools/        # 按需运行的检查、预览和部署工具
 ├── tests/        # Desktop / 网页 / 控制适配的离线回归
@@ -42,8 +44,9 @@ reproduction/
 | --- | --- |
 | [portal/README.md](portal/README.md) | 网页模块分工与静态资源 |
 | [desktop/README.md](desktop/README.md) | 实际运行需要的桌面控制桥 |
-| [tools/README.md](tools/README.md) | 8 个独立 Python 工具及设备权限配置 |
+| [tools/README.md](tools/README.md) | 按需运行的独立工具及设备权限配置 |
 | [autoserl/README.md](autoserl/README.md) | 当前训练、续训、评估操作 |
+| [hilserl/README.md](hilserl/README.md) | 人工接管基线、NUC 更新和验证边界 |
 | [autoserl/RESULTS.md](autoserl/RESULTS.md) | 实验数据与模型来源 |
 | [nuc/README.md](nuc/README.md) | 保持原部署路径的 NUC 源码与插件 |
 | [environment/README.md](environment/README.md) | 安装、锁文件与离线验证 |

@@ -14,7 +14,7 @@
 | `pilot_control.py`、`pilot_gripper.py` | 本机控制 socket、心跳、采集前夹爪准备 |
 | `pilot_online.py` | 回环地址的策略动作接口和执行确认 |
 | `pilot_training.py` | 训练邮箱、人工标签、Home 检查和每轮时限 |
-| `pilot_experiments.py` | 模型选择、准备 / 结束任务及指标读取 |
+| `pilot_experiments.py` | AutoSERL / HIL-SERL 算法与模型选择、准备 / 结束任务及指标读取 |
 | `pilot_health.py` | 反馈超时、恢复和延迟诊断 |
 | `pilot_web.py`、`static/` | 静态资源允许列表、HTML、CSS 与 JavaScript |
 

@@ -51,7 +51,7 @@ function modeFor(s) {
   if(s.pilot?.mode==='homing') {const name=s.pilot.active_home==='custom'?'自定义 Home':'DROID Home';return ['homing','返回 '+name,'info',(s.pilot.joint_phase==='checking'?'正在检查返回路径：':'正在返回 ')+name+' · SpaceMouse 已停用，可按 Stop 中断。'];}
   if(s.pilot?.custom_home?.saving) return ['pending','保存自定义 Home','info','正在保存关节目标并准备自定义返回控制器…'];
   if(s.pilot?.mode==='recovery_check') return ['recovery','回退 / 重放验证','info',(recoveryLabels[s.pilot.recovery_check?.phase] || '验证中')+' · Stop 或拨动 SpaceMouse 可中止。'];
-  if(s.pilot?.mode==='policy') return ['policy','AutoSERL 在线回合','info','策略与自动干预控制中 · 左键成功，右键失败；Stop 或拨动旋钮中止。'];
+  if(s.pilot?.mode==='policy') return ['policy','在线 RL 回合','info',s.pilot.online?.human_intervention_enabled?'HIL-SERL：移动旋钮接管，回中交还策略；左键成功，右键失败；Stop 中止。':'策略控制中 · 左键成功，右键失败；Stop 或拨动旋钮中止。'];
   if(s.recording) return ['running','采集中','good',s.pilot?.mode==='waiting_for_center'?'正在采集 · 请松开 SpaceMouse 旋钮回中。':'正在采集 · SpaceMouse 可操作，完成后点击 Success、Fail 或 Stop。'];
   if((s.pending?.action || awaiting?.action || inflight?.action || '').startsWith('gripper_')) return ['preparing','夹爪准备中','info','正在操作夹爪 · 不录制，机械臂保持当前位置。可按 Stop 中断。'];
   if(awaiting || s.pending) return ['pending','等待确认','info','请求已发送，正在等待控制器确认…'];
@@ -60,7 +60,7 @@ function modeFor(s) {
 function renderControls() {
   const s=current || {}, p=s.pilot || {};
   const fixedGripper=!!s.runtime?.autoserl_demo;
-  write('capture-mode',fixedGripper?'AutoSERL 示范':'人工遥操作');
+  write('capture-mode',fixedGripper?'RL 示范':'人工遥操作');
   write('guide-mode-detail',fixedGripper?'先夹好插块再 Start；采集中夹爪固定，插入成功后点击 Success 保存。':'Start 后松开旋钮回中；左键闭合夹爪，右键张开。');
   const busy=!!awaiting || !!inflight || !!s.pending || !!p.custom_home?.saving;
   const canAct=connected && s.ready && !s.fatal && !s.recording && p.mode==='locked' && !busy;
@@ -97,7 +97,7 @@ function renderControls() {
   }
   for(const id of ['gripper-open','gripper-close']) byId(id).disabled=!canAct || !s.telemetry?.gripper?.ok || !s.telemetry?.gripper?.preparation_supported;
   const gripperBusy=(s.pending?.action || awaiting?.action || inflight?.action || '').startsWith('gripper_');
-  const gripperText=!connected || s.fatal?'夹爪反馈已过期':s.last_command_error? s.last_command_error:s.recording?(fixedGripper?'AutoSERL 采集中：夹爪保持，开合按钮停用':'采集中请使用 SpaceMouse 左 / 右键'):!s.ready?'连接控制并等待设备就绪':!s.telemetry?.gripper?.preparation_supported?'请断开并重新连接控制，启用夹爪按钮':p.mode==='homing'?'等待 Home 完成':gripperBusy?'动作中，等待到位或接触反馈…':s.telemetry?.gripper?.detail || '等待夹爪反馈';
+  const gripperText=!connected || s.fatal?'夹爪反馈已过期':s.last_command_error? s.last_command_error:s.recording?(fixedGripper?'RL 采集中：夹爪保持，开合按钮停用':'采集中请使用 SpaceMouse 左 / 右键'):!s.ready?'连接控制并等待设备就绪':!s.telemetry?.gripper?.preparation_supported?'请断开并重新连接控制，启用夹爪按钮':p.mode==='homing'?'等待 Home 完成':gripperBusy?'动作中，等待到位或接触反馈…':s.telemetry?.gripper?.detail || '等待夹爪反馈';
   write('gripper-status',gripperText+(connected && s.telemetry?.gripper?.ok && Number.isFinite(s.telemetry.gripper_position)?' · '+s.telemetry.gripper_position+'/255':''));
   // Stop can preempt an in-flight Start/Home, and remains reachable after a network failure.
   const finishBusy=inflight?.action==='lock' || awaiting?.action==='lock';

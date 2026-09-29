@@ -242,7 +242,7 @@ def main():
     begin.add_argument('--port',type=int,default=8765)
     begin.add_argument('--web-only',action='store_true',help='start/reuse the web page without connecting control')
     begin.add_argument('--no-open',action='store_true',help='print URLs without opening a desktop browser')
-    begin.add_argument('--autoserl-demo',action='store_true',help='use AutoSERL demonstration recording profile')
+    begin.add_argument('--autoserl-demo','--rl',action='store_true',help='use AutoSERL demonstration recording profile')
     sub.add_parser('stop',help='Finish active capture, then stop the owned portal')
     args=parser.parse_args()
     if args.action=='start' and not 1<=args.port<=65535: parser.error('invalid port')

@@ -32,7 +32,7 @@ class Recorder:
 
     def command(self,action,**kwargs):
         self.commands.append(action)
-        if action=='policy_start':self.transport.request(dict(operation='start',plan_sha256=self.transport.motion.online_sha))
+        if action in ('policy_start','hil_policy_start'):self.transport.request(dict(operation='start',plan_sha256=self.transport.motion.online_sha,human_intervention=action=='hil_policy_start'))
         elif action=='finish':self.transport.stop()
 
     def set_policy(self,index,action):self.transport.request(dict(operation='step',index=index,action=action))

@@ -1,4 +1,4 @@
-"""Sync saved AutoSERL scalar metrics to W&B without importing robot or learner code.
+"""Sync saved AutoSERL / HIL-SERL scalar metrics to W&B without importing robot or learner code.
 
 Run from the repository root. --watch-web also follows new portal experiments.
 Only finalized episode labels are logged; pending post-stop labels stay local.
@@ -17,7 +17,8 @@ import time
 from reproduction.portal.pilot_training import atomic_json
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMAS = ('autoserl_online_run_v1', 'autoserl_frozen_evaluation_v1')
+from .provenance import ALGORITHMS, algorithm_id
+SCHEMAS = tuple(f'{a}_{kind}_v1' for a in ALGORITHMS for kind in ('online_run','frozen_evaluation'))
 LEARNER_METRICS = {
     'actor_loss': "['actor']['actor_loss']",
     'entropy': "['actor']['entropy']",
@@ -52,8 +53,10 @@ def snapshot(folder):
     """Use final outcome, never the stop cause, for binary task reward."""
     manifest = read_json(folder / 'manifest.json')
     if manifest.get('schema') not in SCHEMAS or manifest.get('synthetic') is not False:
-        raise ValueError('Only real AutoSERL training/evaluation runs can be synced')
-    evaluation = manifest['schema'] == SCHEMAS[1]
+        raise ValueError('Only real RL training/evaluation runs can be synced')
+    algorithm=algorithm_id(manifest)
+    evaluation = manifest['schema'].endswith('_frozen_evaluation_v1')
+    human_steps=human_known_steps=0
     prefix = 'eval' if evaluation else 'train'
     history = []; successes = []; steps = auto = known_steps = 0
     previous_recoveries = 0; excluded = pending = 0
@@ -79,6 +82,11 @@ def snapshot(folder):
             auto += intervention; known_steps += row['transitions']
             values['automatic_interventions'] = intervention
             values['automatic_fraction'] = intervention / row['transitions'] if row['transitions'] else 0.
+        human=row.get('human_interventions')
+        if human is not None:
+            human_steps+=human;human_known_steps+=row['transitions']
+            values['human_interventions']=human
+            values['human_fraction']=human/row['transitions'] if row['transitions'] else 0.
         if row.get('recoveries') is not None:
             cumulative = row['recoveries']
             values['recoveries'] = cumulative if evaluation else max(0, cumulative - previous_recoveries)
@@ -111,6 +119,7 @@ def snapshot(folder):
                        mean_return=sum(successes) / len(successes))
     if known_steps:
         summary['automatic_fraction'] = auto / known_steps
+    if human_known_steps:summary['human_fraction']=human_steps/human_known_steps
     verification = folder / 'weights-verification.json'
     if verification.exists():
         summary['weights_unchanged'] = read_json(verification)['unchanged']
@@ -119,7 +128,9 @@ def snapshot(folder):
     config = {k: manifest[k] for k in ('schema', 'demo_sha256', 'initial_demo_episodes',
               'algorithm', 'automatic_assistance', 'reset_intervention_state_each_trial',
               'action_sampling', 'success_criterion') if k in manifest}
-    config['automatic_assistance'] = manifest.get('automatic_assistance', True)
+    config['algorithm_id']=algorithm
+    config['human_intervention']=manifest.get('human_intervention',False)
+    config['automatic_assistance'] = manifest.get('automatic_assistance', algorithm=='autoserl')
     config['reward_definition'] = 'operator-confirmed success=1, failure=0; final labels only'
     config['metric_source'] = 'saved local logs; no images, videos, replay or weights uploaded'
     if manifest.get('resume_from'):
@@ -171,7 +182,7 @@ def selected_folders(paths, watch_web, root=ROOT):
     if watch_web:
         selection = read_json(root / 'reproduction/configs/autoserl/fmb_insertion_recovery_v1.json')
         # Only direct portal runs: nested audit/backup manifests are not experiments.
-        for path in (root / 'reproduction/logs/autoserl-web').glob('*/manifest.json'):
+        for path in (p for a in ALGORITHMS for p in (root / f'reproduction/logs/{a}-web').glob('*/manifest.json')):
             try:
                 manifest = read_json(path)
                 if (manifest.get('schema') in SCHEMAS and manifest.get('synthetic') is False
@@ -229,7 +240,7 @@ def main():
                         cache = runtime / key
                         cache.mkdir(exist_ok=True)
                         run = wandb.init(entity=args.entity, project=args.project, id=key,
-                            name=folder.name, job_type='assisted-evaluation' if data['prefix'] == 'eval' else 'online-training',
+                            name=folder.name, job_type=('assisted-evaluation' if data['config']['automatic_assistance'] else 'unassisted-evaluation') if data['prefix'] == 'eval' else 'online-training',
                             config=data['config'], resume='allow', reinit='create_new', dir=str(cache),
                             settings=wandb.Settings(console='off', disable_code=True, disable_git=True,
                                 save_code=False, x_disable_stats=True, x_disable_meta=True,
