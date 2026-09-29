@@ -1,23 +1,23 @@
 # 独立环境与锁文件
 
-已验证环境：`/home/zwqty/miniconda3/envs/hilserl`，Python 3.10.21，JAX 0.4.35 / jaxlib 0.4.34，RTX 4090。安装和故障修复历史见 [SETUP-2026-09.md](../docs/history/SETUP-2026-09.md)。
+已验证环境：`~/miniconda3/envs/hilserl`，Python 3.10.21，JAX 0.4.35 / jaxlib 0.4.34，RTX 4090。安装和故障修复历史见 [SETUP-2026-09.md](../docs/history/SETUP-2026-09.md)。
 
 | 文件 | 用途 |
 | --- | --- |
 | [constraints.lock.txt](constraints.lock.txt) | 当前 pip 安装所用的固定版本约束 |
 | [conda-explicit.txt](conda-explicit.txt) | 已验证 Linux 环境的 Conda 显式包列表 |
 
-在本机安装依赖的入口仍为仓库根目录下的 `bash reproduction/install-packages.sh`。脚本只面向上述 Conda 环境，安装官方包时使用 `constraints.lock.txt`，安装结束会生成被 Git 忽略的本机快照 `reproduction/pip-freeze.txt`。该快照可清理，可复用版本以锁文件为准。初次安装的候选约束 `constraints.txt` 已被锁文件替代并移除，需要追溯时可查 Git 历史。新机器应先建立合适的独立环境并审阅脚本中的本机路径。
+从仓库根目录运行 `bash reproduction/environment/install-packages.sh`。脚本按自身位置定位仓库，默认从 `~/miniconda3` 加载 Conda，可通过 `HILSERL_CONDA_ROOT` 指定其他安装位置，然后进入 `hilserl` 环境。安装官方包时使用 `constraints.lock.txt`，结束时生成被 Git 忽略的 `reproduction/pip-freeze.txt`，并更新 Conda 显式锁文件。初次安装的候选 `constraints.txt` 已由锁文件替代；本次目录整理没有执行安装。
 
 只做离线复验时：
 
 ```bash
-source /home/zwqty/miniconda3/etc/profile.d/conda.sh
+source ~/miniconda3/etc/profile.d/conda.sh
 conda activate hilserl
 python -m pip check
 PYTHONDONTWRITEBYTECODE=1 JAX_PLATFORMS=cpu python -m pytest reproduction/tests reproduction/autoserl/tests -q -p no:cacheprovider
-PYTHONDONTWRITEBYTECODE=1 XLA_PYTHON_CLIENT_PREALLOCATE=false python reproduction/offline_smoke.py
-PYTHONDONTWRITEBYTECODE=1 XLA_PYTHON_CLIENT_PREALLOCATE=false python reproduction/offline_learning.py
+PYTHONDONTWRITEBYTECODE=1 XLA_PYTHON_CLIENT_PREALLOCATE=false python -m reproduction.tools.offline_smoke
+PYTHONDONTWRITEBYTECODE=1 XLA_PYTHON_CLIENT_PREALLOCATE=false python -m reproduction.tools.offline_learning
 ```
 
 后两个脚本验证 GPU/依赖和合成训练更新，不证明真实任务学习收敛。运行中产生的日志放入 `reproduction/logs/`；大体积 wheel 缓存保留在被忽略的 `reproduction/nuc/wheels/`。

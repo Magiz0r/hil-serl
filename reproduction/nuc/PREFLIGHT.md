@@ -16,7 +16,7 @@
 | `manual_guard.py`、`translation_guard.py`、`fr3_kinematics.py` | 动作计算、状态检查和当前模型下的局部关节预测 |
 | `validate_hold_launch.py`、`offline_*_smoke.py` | 配置和合成 ROS 验证；合成 ROS 要求独立 `--network none` 容器 |
 
-NUC 运行目录为 `/home/tasl/hil_serl_runtime_20260918/`，其中 `source/` 只读挂载到 `/opt/hil-serl-preflight`，`state/` 独立可写。部署清单 `source-sha256.json` 随功能部署更新，主机入口在启动前逐项核对，不固定假设文件数量。ROS master 为 `http://127.0.0.1:11321`。镜像默认命令为 `sleep infinity`，没有自动启动控制器。夹爪的 `gripper_source/`、摘要和临时容器独立，见 [夹爪说明](../docs/GRIPPER.md)。后续 Home 与旋转插件索引见 [README.md](README.md)。
+NUC 运行目录为 `${NUC_RUNTIME}/`，其中 `source/` 只读挂载到 `/opt/hil-serl-preflight`，`state/` 独立可写。部署清单 `source-sha256.json` 随功能部署更新，主机入口在启动前逐项核对，不固定假设文件数量。ROS master 为 `http://127.0.0.1:11321`。镜像默认命令为 `sleep infinity`，没有自动启动控制器。夹爪的 `gripper_source/`、摘要和临时容器独立，见 [夹爪说明](../docs/GRIPPER.md)。后续 Home 与旋转插件索引见 [README.md](README.md)。
 
 ## 恢复前重新核对
 
@@ -33,8 +33,8 @@ NUC 运行目录为 `/home/tasl/hil_serl_runtime_20260918/`，其中 `source/` �
 下列命令会启动真实机械臂控制，只在恢复现场操作时执行：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input
 ```
 

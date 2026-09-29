@@ -16,7 +16,7 @@ import time
 
 from .bootstrap import ROOT, configure
 from .continuous import ContinuousRunner
-from reproduction.pilot_training import atomic_json
+from reproduction.portal.pilot_training import atomic_json
 
 
 def schedule():

@@ -17,14 +17,25 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT/'reproduction/runtime/capture-console'
-SERVER = ROOT/'reproduction/start_capture_console.py'
+SERVER_MODULE = 'reproduction.portal.start_capture_console'
+LEGACY_SERVER = ROOT/'reproduction/start_capture_console.py'
 SERVICE = RUNTIME/'service.json'
 
 
 def say(message):
     print(message, flush=True)
+
+
+def is_server_command(arguments, cwd):
+    """Recognize the package entry point and an already-running pre-migration server."""
+    if arguments[:1] == ['-u']:
+        arguments = arguments[1:]
+    if arguments[:2] == ['-m', SERVER_MODULE]:
+        return cwd == ROOT
+    return bool(arguments and not arguments[0].startswith('-')
+                and (cwd/arguments[0]).resolve() == LEGACY_SERVER)
 
 
 def owns_process(pid):
@@ -36,7 +47,7 @@ def owns_process(pid):
         if fields[0] == 'Z': return False
         arguments = (process/'cmdline').read_bytes().decode().split('\0')[1:]
         cwd = (process/'cwd').resolve()
-        return any(arg and not arg.startswith('-') and (cwd/arg).resolve()==SERVER for arg in arguments)
+        return is_server_command(arguments, cwd)
     except (OSError, ValueError):
         return False
 
@@ -96,7 +107,7 @@ def ensure_server(port, autoserl_demo=False):
         probe.settimeout(.5)
         if probe.connect_ex(('127.0.0.1',port))==0:
             raise RuntimeError('端口 %d 已被其他进程使用；未停止或接管该进程'%port)
-    command=[sys.executable,'-u',str(SERVER),'--port',str(port)]
+    command=[sys.executable,'-u','-m',SERVER_MODULE,'--port',str(port)]
     if autoserl_demo: command.append('--autoserl-demo')
     if tailscale_available(): command.append('--tailscale')
     else: say('[WEB] Tailscale 暂不可用，本次提供本机地址。')

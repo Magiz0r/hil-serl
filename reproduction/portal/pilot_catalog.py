@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 
-from pilot_dataset import atomic_json, CAMERAS
+from reproduction.portal.pilot_dataset import atomic_json, CAMERAS
 
 
 def text_field(value, label, limit=2000, required=True):

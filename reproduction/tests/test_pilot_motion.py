@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 sys.path.insert(0, str(Path(__file__).parents[1] / 'nuc'))
 from manual_guard import ManualGuard
 from pilot_motion import PilotMotion
-from pilot_control import PilotSocket, PilotClient
+from reproduction.portal.pilot_control import PilotSocket, PilotClient
 
 
 class PilotMotionTests(unittest.TestCase):
@@ -135,7 +135,7 @@ class PilotMotionTests(unittest.TestCase):
                 self.assertTrue(server.poll()['connected'])
                 with self.assertRaisesRegex(RuntimeError,'already owns'):
                     PilotClient(directory)
-                with patch('pilot_control.time.monotonic',return_value=0):
+                with patch('reproduction.portal.pilot_control.time.monotonic',return_value=0):
                     self.assertFalse(server.poll()['connected'])
                 client.close()
                 self.assertEqual(server.poll()['action'],'lock')

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from reproduction.autoserl.evaluate_frozen import EvaluationRunner, schedule
-from reproduction.pilot_training import session_command, session_status
+from reproduction.portal.pilot_training import session_command, session_status
 
 
 class Policy:

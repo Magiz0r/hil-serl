@@ -9,8 +9,8 @@ import tempfile
 import threading
 import time
 
-from pilot_dataset import SCHEMA
-from pilot_video import video_status
+from reproduction.portal.pilot_dataset import SCHEMA
+from reproduction.portal.pilot_video import video_status
 
 
 def replace_json(path, value):

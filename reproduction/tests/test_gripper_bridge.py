@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from gripper_bridge import GripperBridge
+from reproduction.desktop.gripper_bridge import GripperBridge
 
 # A local process substitutes only SSH; actual pipe I/O and worker threads run.
 FAKE_REMOTE = r'''
@@ -31,7 +31,7 @@ for line in sys.stdin:
 class GripperBridgeTests(unittest.TestCase):
     def test_preparation_ack_is_correlated_to_real_remote_command_id(self):
         with tempfile.TemporaryDirectory() as directory, \
-             patch('gripper_bridge.subprocess.Popen', side_effect=self.fake_popen):
+             patch('reproduction.desktop.gripper_bridge.subprocess.Popen', side_effect=self.fake_popen):
             bridge=GripperBridge(Path(directory))
             try:
                 bridge.wait_ready()
@@ -65,7 +65,7 @@ class GripperBridgeTests(unittest.TestCase):
 
     def test_slow_remote_does_not_block_arm_loop_and_close_sends_stop(self):
         with tempfile.TemporaryDirectory() as directory, \
-             patch('gripper_bridge.subprocess.Popen', side_effect=self.fake_popen):
+             patch('reproduction.desktop.gripper_bridge.subprocess.Popen', side_effect=self.fake_popen):
             bridge = GripperBridge(Path(directory))
             try:
                 bridge.wait_ready()
@@ -85,7 +85,7 @@ class GripperBridgeTests(unittest.TestCase):
 
     def test_missing_main_heartbeat_terminates_gripper_channel(self):
         with tempfile.TemporaryDirectory() as directory, \
-             patch('gripper_bridge.subprocess.Popen', side_effect=self.fake_popen):
+             patch('reproduction.desktop.gripper_bridge.subprocess.Popen', side_effect=self.fake_popen):
             bridge = GripperBridge(Path(directory))
             try:
                 bridge.wait_ready()

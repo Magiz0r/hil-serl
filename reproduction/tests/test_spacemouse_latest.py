@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from spacemouse_upward_trial import read_latest_input
+from reproduction.desktop.spacemouse_upward_trial import read_latest_input
 
 
 def state(stamp, x=0., buttons=(0, 0)):

@@ -14,7 +14,7 @@ import signal
 import threading
 import time
 
-from reproduction.pilot_training import atomic_json
+from reproduction.portal.pilot_training import atomic_json
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS = ('autoserl_online_run_v1', 'autoserl_frozen_evaluation_v1')

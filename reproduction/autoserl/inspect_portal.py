@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from reproduction.pilot_dataset import validate_episode
+from reproduction.portal.pilot_dataset import validate_episode
 
 
 def inspect_episode(directory):

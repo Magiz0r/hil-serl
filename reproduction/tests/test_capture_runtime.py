@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from start_capture_console import CaptureRuntime, control_failure
+from reproduction.portal.start_capture_console import CaptureRuntime, control_failure
 
 
 class RuntimeTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class RuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);(root/'runtime').mkdir()
             camera=Mock(error=None);camera.snapshot.return_value=None
-            with patch('start_capture_console.ROOT',root),patch('start_capture_console.Camera',side_effect=[PermissionError('read/write denied'),PermissionError('read/write denied'),camera,camera]),patch('start_capture_console.subprocess.Popen') as launch:
+            with patch('reproduction.portal.start_capture_console.ROOT',root),patch('reproduction.portal.start_capture_console.Camera',side_effect=[PermissionError('read/write denied'),PermissionError('read/write denied'),camera,camera]),patch('reproduction.portal.start_capture_console.subprocess.Popen') as launch:
                 runtime=CaptureRuntime({'external':{},'wrist':{}},{'name':'test','prompt':'Test'},root/'runtime')
                 try:
                     status=runtime.get_status()
@@ -42,7 +42,7 @@ class RuntimeTests(unittest.TestCase):
             (root/'runtime').mkdir()
             camera=Mock(error=None)
             camera.snapshot.return_value=None
-            with patch('start_capture_console.ROOT',root),patch('start_capture_console.Camera',return_value=camera),patch('start_capture_console.subprocess.run') as run,patch('start_capture_console.subprocess.Popen') as launch:
+            with patch('reproduction.portal.start_capture_console.ROOT',root),patch('reproduction.portal.start_capture_console.Camera',return_value=camera),patch('reproduction.portal.start_capture_console.subprocess.run') as run,patch('reproduction.portal.start_capture_console.subprocess.Popen') as launch:
                 runtime=CaptureRuntime({'external':{},'wrist':{}},{'name':'initial','prompt':'Test'},root/'runtime')
                 try:
                     for _ in range(3): self.assertFalse(runtime.get_status()['ready'])
@@ -75,7 +75,7 @@ class RuntimeTests(unittest.TestCase):
             entered,released=threading.Event(),threading.Event()
             def preflight(*args,**kwargs):
                 entered.set();released.wait(2);return Mock(returncode=0,stdout='READ_ONLY_PREFLIGHT_OK',stderr='')
-            with patch('start_capture_console.ROOT',root),patch('start_capture_console.Camera',return_value=camera),patch('start_capture_console.subprocess.run',side_effect=preflight),patch('start_capture_console.subprocess.Popen') as launch:
+            with patch('reproduction.portal.start_capture_console.ROOT',root),patch('reproduction.portal.start_capture_console.Camera',return_value=camera),patch('reproduction.portal.start_capture_console.subprocess.run',side_effect=preflight),patch('reproduction.portal.start_capture_console.subprocess.Popen') as launch:
                 runtime=CaptureRuntime({'external':{},'wrist':{}},{'name':'test','prompt':'Test'},root/'runtime')
                 try:
                     runtime.runtime_action({'action':'connect'});self.assertTrue(entered.wait(2))

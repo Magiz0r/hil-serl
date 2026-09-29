@@ -13,8 +13,8 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from pilot_dataset import Episode, health_error, validate_episode
-from record_manual_pilot import Recorder
+from reproduction.portal.pilot_dataset import Episode, health_error, validate_episode
+from reproduction.portal.record_manual_pilot import Recorder
 
 
 def snapshot(now, sequence=1):

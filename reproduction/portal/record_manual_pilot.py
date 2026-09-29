@@ -24,20 +24,20 @@ import time
 from urllib.parse import urlparse
 import uuid
 
-from pilot_dataset import CAMERAS, SCHEMA, Episode, atomic_json, health_error, new_episode_name
-from pilot_control import PilotClient
-from pilot_gripper import PREPARE_ACTIONS, preparation_status
-from pilot_web import asset, stream_status
-from pilot_catalog import CaptureCatalog
-from pilot_records import EpisodeLibrary
-from pilot_video import VideoExporter
-from pilot_online import OnlineAPI
-from pilot_training import session_status, session_command
-from nuc.latest_jsonl import LatestJSONL
-from pilot_health import HealthJournal
+from reproduction.portal.pilot_dataset import CAMERAS, SCHEMA, Episode, atomic_json, health_error, new_episode_name
+from reproduction.portal.pilot_control import PilotClient
+from reproduction.portal.pilot_gripper import PREPARE_ACTIONS, preparation_status
+from reproduction.portal.pilot_web import asset, stream_status
+from reproduction.portal.pilot_catalog import CaptureCatalog
+from reproduction.portal.pilot_records import EpisodeLibrary
+from reproduction.portal.pilot_video import VideoExporter
+from reproduction.portal.pilot_online import OnlineAPI
+from reproduction.portal.pilot_training import session_status, session_command
+from reproduction.nuc.latest_jsonl import LatestJSONL
+from reproduction.portal.pilot_health import HealthJournal
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class Camera:

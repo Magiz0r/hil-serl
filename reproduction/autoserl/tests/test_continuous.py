@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from reproduction.pilot_training import atomic_json,session_status,session_command,read_commands,ready_at_home,training_settings,save_training_settings
+from reproduction.portal.pilot_training import atomic_json,session_status,session_command,read_commands,ready_at_home,training_settings,save_training_settings
 from reproduction.autoserl.continuous import ContinuousRunner
 
 

@@ -18,7 +18,7 @@ import subprocess
 import sys
 import threading
 import time
-from pilot_gripper import IdleGripper, arm_command
+from reproduction.portal.pilot_gripper import IdleGripper, arm_command
 
 
 def read_latest_input(device, previous_stamp, official, max_reports=256, on_buttons=None):
@@ -110,7 +110,7 @@ def main():
             device.close()
         raise ValueError("SpaceMouse did not open exactly once")
 
-    logdir = Path(__file__).parent / "logs" / (
+    logdir = Path(__file__).resolve().parents[1] / "logs" / (
         ("spacemouse-manual-" if manual else "spacemouse-upward-") + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     )
     logdir.mkdir()
@@ -119,12 +119,12 @@ def main():
     shared, lock = {}, threading.Lock()
     try:
         if args.pilot_gate:
-            from pilot_control import PilotSocket
+            from reproduction.portal.pilot_control import PilotSocket
             pilot = PilotSocket(logdir)
         with (logdir / "ssh.stderr.log").open("x") as stderr, (logdir / "events.jsonl").open("x") as events, (logdir / "input.jsonl").open("x") as inputs:
             if args.with_gripper:
-                from gripper_bridge import GripperBridge
-                from gripper_buttons import GripperButtons
+                from reproduction.desktop.gripper_bridge import GripperBridge
+                from reproduction.desktop.gripper_buttons import GripperButtons
                 buttons = GripperButtons()
                 gripper = GripperBridge(logdir, activate=args.activate_gripper_if_needed,
                                         speed=args.gripper_speed)

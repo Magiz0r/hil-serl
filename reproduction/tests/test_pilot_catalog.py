@@ -10,8 +10,8 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from pilot_catalog import CaptureCatalog
-from record_manual_pilot import Recorder
+from reproduction.portal.pilot_catalog import CaptureCatalog
+from reproduction.portal.record_manual_pilot import Recorder
 
 
 class CatalogTests(unittest.TestCase):
@@ -51,7 +51,7 @@ class CatalogTests(unittest.TestCase):
         for frames in (None, {'external': dict(jpeg=b'x',pc_captured_at=time.monotonic()-1)}):
             with self.assertRaises(ValueError): self.catalog.apply(dict(action='layout_capture',name='stale'), frames)
         with self.assertRaises(ValueError): self.catalog.image('../catalog.json','external')
-        with patch('pilot_catalog.atomic_json', side_effect=OSError('disk full')):
+        with patch('reproduction.portal.pilot_catalog.atomic_json', side_effect=OSError('disk full')):
             with self.assertRaises(OSError): self.catalog.apply(dict(action='task_create',name='lost',prompt='test'))
         self.assertEqual(self.catalog.snapshot(), before)
         self.assertEqual(len(json.loads(self.catalog.path.read_text())['tasks']),1)

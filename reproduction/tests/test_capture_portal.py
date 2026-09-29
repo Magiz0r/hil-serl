@@ -7,10 +7,19 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path(__file__).parents[1]))
-import capture_portal as portal
-
-
+from reproduction.portal import capture_portal as portal
 class PortalLauncherTests(unittest.TestCase):
+    def test_package_server_ownership_is_scoped_to_this_checkout(self):
+        command=['-u','-m',portal.SERVER_MODULE,'--port','8765']
+        self.assertTrue(portal.is_server_command(command,portal.ROOT))
+        self.assertFalse(portal.is_server_command(command,Path('/tmp/another-checkout')))
+        self.assertFalse(portal.is_server_command(['-c','pass',*command],portal.ROOT))
+        self.assertFalse(portal.is_server_command(['-m','another.server',portal.SERVER_MODULE],portal.ROOT))
+
+    def test_pre_migration_server_can_still_be_stopped(self):
+        self.assertTrue(portal.is_server_command(['-u',str(portal.LEGACY_SERVER)],Path('/tmp')))
+        self.assertFalse(portal.is_server_command(['another.py',str(portal.LEGACY_SERVER)],portal.ROOT))
+
     def setUp(self):
         self.service={'pid':999999,'local_url':'http://127.0.0.1:8765/','tailscale_url':'http://100.64.1.2:8765/'}
 

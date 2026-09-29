@@ -3,7 +3,7 @@
 import argparse
 import json
 from pathlib import Path
-from pilot_dataset import validate_episode
+from reproduction.portal.pilot_dataset import validate_episode
 
 
 def main():

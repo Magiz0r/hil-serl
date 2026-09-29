@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
-from pilot_online import OnlineAPI
+from reproduction.portal.pilot_online import OnlineAPI
 from reproduction.autoserl.online_smoke import SyntheticPortal
 from reproduction.autoserl.online_env import PortalEnv
 from reproduction.autoserl.bootstrap import ROOT

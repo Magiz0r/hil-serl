@@ -1,6 +1,6 @@
 # 手动采集与数据检查
 
-当前操作手册是 [TASL FR3 · Capture Console](CAPTURE_CONSOLE.md)。在仓库根目录执行：
+当前操作手册是 [FR3 · Capture Console](CAPTURE_CONSOLE.md)。在仓库根目录执行：
 
 ```bash
 bash start_capture.sh
@@ -20,9 +20,9 @@ bash stop_capture.sh
 
 ```bash
 conda activate hilserl
-python reproduction/validate_pilot.py reproduction/data/manual_capture/pilot_XXX/episode_XXX
+python -m reproduction.tools.validate_pilot reproduction/data/manual_capture/pilot_XXX/episode_XXX
 ```
 
-这是原始手动采集格式。整条成功不等于每帧都是成功奖励，原始 SpaceMouse 输入也不自动等同于训练环境执行的 action。训练数据衔接见 [AutoSERL 兼容性说明](../autoserl/README.md#现有-portal-的复用边界)。
+这是原始手动采集格式。整条成功不等于每帧都是成功奖励，原始 SpaceMouse 输入也不自动等同于训练环境执行的 action。训练数据衔接见 [AutoSERL 示范采集与导出](../autoserl/DEMO_CAPTURE.md)。
 
 方块入杯试录、旧版 Finish 页面和分步启动过程已移至 [历史记录](history/PILOT_CAPTURE-2026-09.md)。

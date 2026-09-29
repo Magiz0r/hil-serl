@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source /home/zwqty/miniconda3/etc/profile.d/conda.sh
+capture_repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+capture_conda_root="${HILSERL_CONDA_ROOT:-${HOME}/miniconda3}"
+source "$capture_conda_root/etc/profile.d/conda.sh"
 conda activate hilserl
-cd /home/zwqty/hil-serl
-export PIP_CONSTRAINT=/home/zwqty/hil-serl/reproduction/environment/constraints.lock.txt
-cd serl_launcher
+export PIP_CONSTRAINT="$capture_repo/reproduction/environment/constraints.lock.txt"
+cd -- "$capture_repo/serl_launcher"
 python -m pip install --no-build-isolation --config-settings editable_mode=compat -e .
 python -m pip install -r requirements.txt
 cd ../serl_robot_infra

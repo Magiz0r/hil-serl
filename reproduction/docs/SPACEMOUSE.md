@@ -44,7 +44,7 @@ next_rotation = Rotation.from_rotvec(action[3:6] * ACTION_SCALE[1]) * measured_r
 
 ## 当前诊断入口
 
-控制入口保留为 `reproduction/spacemouse_upward_trial.py`。使用 `--execute-attended-manual --no-trial-bounds --official-input` 时：
+控制入口保留为 `reproduction/desktop/spacemouse_upward_trial.py`。使用 `--execute-attended-manual --no-trial-bounds --official-input` 时：
 
 | 操作 | 当前行为 |
 | --- | --- |
@@ -64,8 +64,8 @@ NUC 使用 `ram_measured_step`，约 10 Hz 从最新实测位姿计算每步增�
 在上述手动模式下添加 `--speed-scale 1.5` 或 `--speed-scale 2`，提高同样 SpaceMouse 推幅对应的平移和旋转增量。默认 1 保留 RAM 基线；其余档是本地诊断配置，不是官方任务配置。2 倍档的原始尺度为每步 20 mm / 0.12 rad；多轴合成后还受 20 mm / 0.10 rad 偏移范数约束和原有预测关节速度约束，因此不保证实际速度提高 2 倍。动作周期仍为 10 Hz，目标仍从实测位姿计算，松手回中即捕获保持目标。
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input \
   --with-gripper --speed-scale 2 --gripper-speed 192
 ```
@@ -81,8 +81,8 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 在提速命令后添加 `--rotation-response fast`，单独将旋转刚度/阻尼由 150/7 改为 300/10。默认 `standard` 保留原值。这会加强朝向误差对应的恢复力矩，同时提高阻尼；它不是固定角速度命令，也不保证实际角速度翻倍。300 在当前控制器允许的参数范围内，但控制器允许范围本身不是现场安全保证。
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input \
   --with-gripper --speed-scale 2 --gripper-speed 192 --rotation-response fast
 ```
@@ -96,8 +96,8 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 在 2 倍动作增益基础上添加 `--translation-scale 1.6`，把平移原始动作尺度从每步 20 mm 降至 16 mm（输入增益减少 20%）；旋转原始尺度仍为 0.12 rad，旋转刚度/阻尼仍为 300/10，夹爪仍为速度 192、力值 30。未设置该参数时，平移继续沿用 `--speed-scale`。原有关节预测和跟随检查仍适用，实际 TCP 速度不保证严格下降 20%。
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input \
   --with-gripper --speed-scale 2 --translation-scale 1.6 \
   --gripper-speed 192 --rotation-response fast
@@ -112,8 +112,8 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 在当前命令添加 `--rotation-scale 3`，旋转原始动作尺度从 0.12 rad 提高到 0.18 rad；平移仍为 16 mm。为了让较大旋转输入也能获得提升，此档含旋转动作的局部预测关节速度预算为 0.55 rad/s，平移分量的预算仍为 0.4 rad/s。组合动作仍共同缩放；旋转目标偏差上限 0.10 rad、平移 20 mm、实际关节速度退出阈值 0.6 rad/s、URDF 限位和故障检查保持原值。旋转刚度/阻尼继续使用 300/10，夹爪速度 192、力值 30。
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input --with-gripper \
   --speed-scale 2 --translation-scale 1.6 --rotation-scale 3 \
   --gripper-speed 192 --rotation-response fast
@@ -126,8 +126,8 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 `--rotation-response responsive` 使用独立插件 `hil_serl_rotation/ResponsiveCartesianImpedanceController`。它复制固定镜像中的 Cartesian 控制器，仅更名类/库并把朝向 SLERP 系数从 0.005 改为 0.02；按 1 kHz 更新计算，平滑时间常数从约 200 ms 缩短至 50 ms。平移及增益的平滑仍为 0.005，力矩变化限幅、误差裁剪和外层保护保持原值。旋转刚度/阻尼仍为 300/10。这是本地跟随调整，不能将时间常数变化解释为实际角速度提高四倍。
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input --with-gripper \
   --speed-scale 2 --translation-scale 1.6 --rotation-scale 3 \
   --gripper-speed 192 --rotation-response responsive

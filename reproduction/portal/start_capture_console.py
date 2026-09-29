@@ -20,13 +20,13 @@ import time
 import uuid
 
 from http.server import ThreadingHTTPServer
-from pilot_catalog import CaptureCatalog
-from pilot_dataset import CAMERAS
-from pilot_records import EpisodeLibrary, replace_json
-from pilot_video import VideoExporter
-from record_manual_pilot import ROOT, Camera, Recorder, handler_for
-from pilot_training import session_status, session_command, training_settings, save_training_settings
-from pilot_experiments import ExperimentStore, ExperimentManager
+from reproduction.portal.pilot_catalog import CaptureCatalog
+from reproduction.portal.pilot_dataset import CAMERAS
+from reproduction.portal.pilot_records import EpisodeLibrary, replace_json
+from reproduction.portal.pilot_video import VideoExporter
+from reproduction.portal.record_manual_pilot import ROOT, Camera, Recorder, handler_for
+from reproduction.portal.pilot_training import session_status, session_command, training_settings, save_training_settings
+from reproduction.portal.pilot_experiments import ExperimentStore, ExperimentManager
 
 SSH = ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
        '-o', 'StrictHostKeyChecking=yes', 'FrankaNUC']
@@ -199,17 +199,17 @@ class CaptureRuntime:
                 raise ValueError('NUC / Franka Desk (172.16.0.1) 预检未通过：'+(detail[-1][:250] if detail else '无状态反馈')+'。日志：'+str(run/'preflight.log'))
             before=set((ROOT/'reproduction/logs').glob('spacemouse-manual-*'))
             output=(run/'control.log').open('x')
-            command=[sys.executable,'-u',str(ROOT/'reproduction/spacemouse_upward_trial.py'),
+            command=[sys.executable,'-u','-m','reproduction.desktop.spacemouse_upward_trial',
                 '--execute-attended-manual','--no-trial-bounds','--official-input','--with-gripper',
                 '--speed-scale','2','--translation-scale','1.6','--rotation-scale','3',
                 '--rotation-response','responsive','--gripper-speed','192','--pilot-gate','--official-home']
             if self.autoserl_demo:
-                command=[sys.executable,'-u',str(ROOT/'reproduction/spacemouse_upward_trial.py'),
+                command=[sys.executable,'-u','-m','reproduction.desktop.spacemouse_upward_trial',
                     '--execute-attended-manual','--no-trial-bounds','--official-input','--with-gripper',
                     '--autoserl-demo','--gripper-speed','192','--pilot-gate','--official-home']
             with self.lock:
                 if self.done.is_set() or self.connect_cancel.is_set():self.disconnect();return
-                self.control=subprocess.Popen(command,stdout=output,stderr=subprocess.STDOUT,
+                self.control=subprocess.Popen(command,cwd=ROOT,stdout=output,stderr=subprocess.STDOUT,
                     start_new_session=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
             deadline=time.monotonic()+50;session=None
             while not self.done.is_set() and not self.connect_cancel.is_set() and time.monotonic()<deadline:

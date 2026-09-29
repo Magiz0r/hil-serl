@@ -7,7 +7,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-from pilot_web import asset
+from reproduction.portal.pilot_web import asset
 
 
 class PreviewHandler(BaseHTTPRequestHandler):

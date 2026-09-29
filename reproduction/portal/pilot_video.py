@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 
-from pilot_dataset import CAMERAS, validate_episode
+from reproduction.portal.pilot_dataset import CAMERAS, validate_episode
 
 
 def video_status(directory):

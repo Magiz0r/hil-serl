@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
-  echo 'Run once with: sudo bash reproduction/setup_capture_permissions.sh <Desktop-user>' >&2
+  echo 'Run once with: sudo bash reproduction/tools/setup_capture_permissions.sh <Desktop-user>' >&2
   exit 1
 fi
 capture_user="${1:-${SUDO_USER:-}}"

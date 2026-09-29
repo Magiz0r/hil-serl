@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 
-from reproduction.pilot_training import RUNTIME,atomic_json,read_commands,ready_at_home,mailbox_lock
+from reproduction.portal.pilot_training import RUNTIME,atomic_json,read_commands,ready_at_home,mailbox_lock
 
 
 class ButtonTail:

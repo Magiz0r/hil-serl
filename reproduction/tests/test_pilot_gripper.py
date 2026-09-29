@@ -6,8 +6,8 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from pilot_control import PilotClient, PilotSocket
-from pilot_gripper import IdleGripper, arm_command, preparation_status
+from reproduction.portal.pilot_control import PilotClient, PilotSocket
+from reproduction.portal.pilot_gripper import IdleGripper, arm_command, preparation_status
 
 
 def command(action='gripper_close', identifier=2):

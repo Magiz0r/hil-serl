@@ -11,7 +11,7 @@ import subprocess
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--deploy', action='store_true', required=True)
 parser.parse_args()
-repository = Path(__file__).resolve().parents[1]
+repository = Path(__file__).resolve().parents[2]
 
 files = {
     'run_gripper.py': 'reproduction/nuc/run_gripper.py',

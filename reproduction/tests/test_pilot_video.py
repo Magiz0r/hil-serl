@@ -12,10 +12,10 @@ import unittest
 from types import SimpleNamespace
 
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from pilot_dataset import Episode
-from pilot_records import EpisodeLibrary
-from pilot_video import export_episode, video_status, VideoExporter
-from record_manual_pilot import Recorder, handler_for
+from reproduction.portal.pilot_dataset import Episode
+from reproduction.portal.pilot_records import EpisodeLibrary
+from reproduction.portal.pilot_video import export_episode, video_status, VideoExporter
+from reproduction.portal.record_manual_pilot import Recorder, handler_for
 from reproduction.tests.test_pilot_dataset import snapshot
 
 

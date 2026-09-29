@@ -1,7 +1,7 @@
 """Read-only presentation helpers shared by the recorder and offline preview."""
 from pathlib import Path
 
-WEB_ROOT = Path(__file__).resolve().parent
+WEB_ROOT = Path(__file__).resolve().parent / 'static'
 ASSETS = {
     '/': ('pilot_capture.html', 'text/html; charset=utf-8'),
     '/ui/theme.css': ('pilot_ui/theme.css', 'text/css; charset=utf-8'),

@@ -1,8 +1,10 @@
 # 方块入杯试录：早期分步流程
 
+> 公开归档中的账号、设备地址及机器标识已脱敏，Desktop 脚本路径已按当前目录迁移。示例不是原始部署凭据；运行前请看 [当前手册](../../README.md) 和 [占位约定](../PRIVACY.md)。
+
 本文于 2026-09-23 归档。下文的 Finish 和结果选择器属于旧版页面；现行按钮为 Success / Fail / Stop，完整启动入口为根目录 `start_capture.sh`。当前操作见 [CAPTURE_CONSOLE.md](../CAPTURE_CONSOLE.md)。
 
-网页现已更新为 **TASL FR3 · Capture Console**，支持多任务、Layout、历史回放与 DROID Home；本文的方块入杯仅为试录实例。下文保留手动分步启动方式。离线演示、页面结构与接口说明见 [CAPTURE_CONSOLE.md](../CAPTURE_CONSOLE.md)。预览只需 `python3 reproduction/preview_pilot.py`，无需启动机器人。
+网页现已更新为 **FR3 · Capture Console**，支持多任务、Layout、历史回放与 DROID Home；本文的方块入杯仅为试录实例。下文保留手动分步启动方式。离线演示、页面结构与接口说明见 [CAPTURE_CONSOLE.md](../CAPTURE_CONSOLE.md)。预览只需 `python3 -m reproduction.tools.preview_pilot`，无需启动机器人。
 
 任务：抓起方块，放入固定杯子，松开夹爪并退开。成功定义为方块留在杯内，夹爪已离开。操作者已确认方块可以通过杯口。
 
@@ -20,8 +22,8 @@
 先核验专用控制容器与当前机器人状态，按 [SpaceMouse 说明](../SPACEMOUSE.md) 启动遥操作，并加上 `--pilot-gate`：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input --with-gripper \
   --speed-scale 2 --translation-scale 1.6 --rotation-scale 3 --rotation-response responsive --gripper-speed 192 \
   --pilot-gate --official-home
@@ -30,13 +32,13 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 该模式默认保持当前位置，SpaceMouse 不可移动机械臂或开合夹爪。然后另开终端，指定该次 PC 日志目录：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/record_manual_pilot.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.portal.record_manual_pilot \
   --session reproduction/logs/spacemouse-manual-<本轮UTC时间> \
   --cameras reproduction/configs/cameras.json --port 8765
 ```
 
-用机器人电脑上的浏览器访问 `http://127.0.0.1:8765`。远程访问可在录制器启动命令后加 `--tailscale`：同时监听本机 Tailscale IPv4 的 8765 端口，直接访问 `http://100.79.65.37:8765/`，无需口令或 Cookie 验证。也可使用 SSH 本地端口转发。相机设备已被占用或没有权限时会拒绝启动，不会抢占其他采集进程。
+用机器人电脑上的浏览器访问 `http://127.0.0.1:8765`。远程访问可在录制器启动命令后加 `--tailscale`：同时监听本机 Tailscale IPv4 的 8765 端口，直接访问 `http://${TAILSCALE_IP}:8765/`，无需口令或 Cookie 验证。也可使用 SSH 本地端口转发。相机设备已被占用或没有权限时会拒绝启动，不会抢占其他采集进程。
 
 页面显示两路实时预览，进入就绪状态后：
 
@@ -79,12 +81,12 @@ PC 与 NUC 的 monotonic 时间不直接相减。记录相机读出时间、PC �
 核验结束的试录目录：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python \
-  reproduction/validate_pilot.py reproduction/data/block_into_cup/<本轮目录>
+PYTHONDONTWRITEBYTECODE=1 python \
+  -m reproduction.tools.validate_pilot reproduction/data/block_into_cup/<本轮目录>
 ```
 
 2026-09-21：两路实际相机各采 15 帧通过；第一条真实方块入杯试录仍由操作者开始并标记结果。Start/Finish/Home 的离线验证与本轮运行记录见 `reproduction/logs/resume-2026-09-21/`。
 
 2026-09-21 平滑 Home 更新：新插件的真机原位往返切换通过，最大末端偏移约 0.15 mm；整段官方 Home 回位仍待操作者点击验证。99 项 Python 测试、无网络容器中的轨迹/C++ 插件加载与模拟硬件测试、离线 ROS Home 流程均通过。当前交接见 `reproduction/logs/resume-2026-09-21/smooth-home-handoff.json`。
 
-2026-09-21 后续更新：DROID 目标及自动结束判定已同步 NUC。完成条件增加完整轨迹时长和期望关节目标检查，避免仅凭实测误差提前切回控制器；无网络 ROS 的完整 Home、中断与失联验证通过。本版尚未做真机运动验收：机械臂地址 `172.16.0.1` 当时不可达，先前“待点击验证”并不表示现场已具备控制连接。详见 [CAPTURE_CONSOLE.md](../CAPTURE_CONSOLE.md)。
+2026-09-21 后续更新：DROID 目标及自动结束判定已同步 NUC。完成条件增加完整轨迹时长和期望关节目标检查，避免仅凭实测误差提前切回控制器；无网络 ROS 的完整 Home、中断与失联验证通过。本版尚未做真机运动验收：机械臂地址 `${ROBOT_IP}` 当时不可达，先前“待点击验证”并不表示现场已具备控制连接。详见 [CAPTURE_CONSOLE.md](../CAPTURE_CONSOLE.md)。

@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from reproduction.pilot_experiments import ExperimentStore, ExperimentManager
+from reproduction.portal.pilot_experiments import ExperimentStore, ExperimentManager
 
 
 def write(path, data):

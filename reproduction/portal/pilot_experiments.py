@@ -14,13 +14,10 @@ import threading
 import time
 import uuid
 
-try:
-    from .pilot_training import atomic_json, session_status
-except ImportError:
-    from pilot_training import atomic_json, session_status
+from reproduction.portal.pilot_training import atomic_json, session_status
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def read_json(path):

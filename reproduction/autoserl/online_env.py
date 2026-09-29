@@ -12,7 +12,7 @@ import requests
 from scipy.spatial.transform import Rotation
 
 from .export_demo import measured_pose, state_observation
-from reproduction.pilot_training import training_settings
+from reproduction.portal.pilot_training import training_settings
 
 
 IMAGE_KEYS = ('wrist_1', 'wrist_2')

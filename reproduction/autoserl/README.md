@@ -81,7 +81,7 @@ W&B 同步是独立进程，读取落盘数值，不连接机械臂；当前用�
 ```bash
 conda activate hilserl
 python -m reproduction.autoserl.wandb_sync \
-  --entity lerobot-training --project autoserl-fr3 --watch-web
+  --entity "$WANDB_ENTITY" --project autoserl-fr3 --watch-web
 ```
 
 `--run <目录>` 可补传指定实验；`--dry-run` 只查看摘要，不访问 W&B。只同步已提交
@@ -144,7 +144,7 @@ PYTHONDONTWRITEBYTECODE=1 JAX_PLATFORMS=cpu python -m pytest \
   reproduction/tests reproduction/autoserl/tests -q -p no:cacheprovider
 ```
 
-2026-09-29：**305 项通过**；警告来自现有 JAX / Gymnasium 弃用接口。
+2026-09-29 目录迁移后：**307 项通过**；警告来自现有 JAX / Gymnasium 弃用接口。
 HTTP / Unix socket / Chrome 测试需要本机通信和子进程权限，全部使用模拟硬件。
 GPU 合成学习可另行运行 `python -m reproduction.autoserl.offline_smoke --output
 reproduction/logs/autoserl/offline-smoke.json`；CPU 需显式 `--backend cpu`。

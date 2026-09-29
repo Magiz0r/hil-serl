@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from html import unescape
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[1] / 'portal' / 'static'
 BOOTSTRAP = r'''
 window.testErrors=[]; window.testCommands=[];
 window.addEventListener('error',event=>testErrors.push(event.message));

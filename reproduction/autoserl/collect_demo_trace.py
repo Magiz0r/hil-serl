@@ -6,7 +6,7 @@ import re
 import subprocess
 
 from reproduction.autoserl.export_demo import PROTOCOL, checked_trace, read_rows
-from reproduction.pilot_dataset import validate_episode
+from reproduction.portal.pilot_dataset import validate_episode
 
 
 def collect_trace(episode):

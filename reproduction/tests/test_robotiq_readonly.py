@@ -1,7 +1,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
-spec = importlib.util.spec_from_file_location('probe', Path(__file__).parents[1] / 'probe_robotiq_readonly.py')
+spec = importlib.util.spec_from_file_location('probe', Path(__file__).parents[1] / 'tools' / 'probe_robotiq_readonly.py')
 probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(probe)
 

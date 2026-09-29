@@ -5,8 +5,8 @@ import tempfile
 import unittest
 
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from pilot_dataset import SCHEMA
-from pilot_records import EpisodeLibrary
+from reproduction.portal.pilot_dataset import SCHEMA
+from reproduction.portal.pilot_records import EpisodeLibrary
 
 
 class SavedRecordsTests(unittest.TestCase):

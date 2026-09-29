@@ -10,9 +10,9 @@ import unittest
 from unittest.mock import Mock
 
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from record_manual_pilot import Recorder, handler_for
-from pilot_web import ASSETS, asset, stream_status
-from preview_pilot import PreviewHandler
+from reproduction.portal.record_manual_pilot import Recorder, handler_for
+from reproduction.portal.pilot_web import ASSETS, asset, stream_status
+from reproduction.tools.preview_pilot import PreviewHandler
 
 
 class PilotHTTPTests(unittest.TestCase):

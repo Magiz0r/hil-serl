@@ -1,5 +1,7 @@
 # FR3 真机预检记录 — 2026-09-18
 
+> 公开归档中的账号、设备地址及机器标识已脱敏，Desktop 脚本路径已按当前目录迁移。示例不是原始部署凭据；运行前请看 [当前手册](../../README.md) 和 [占位约定](../PRIVACY.md)。
+
 > 历史记录归档：以下状态与命令按当时记录保留；当前入口和状态见 [复现总览](../../README.md)。旧路径仅供追溯。
 
 最新状态（2026-09-18 17:45 PDT）：用户确认修复输入积压后手感可用，反馈速度略慢，随后要求暂停休息。本轮已由双键正常退出；PC/NUC 本轮控制进程为 0，专用容器已停、机器人连接和 11321 已释放，Desk 任务空闲且无错误。机械臂仍通电，既有 FCI 开关/令牌保留，其他部署未变。51 项离线测试通过；配置、源码哈希和结果已保存到 [SPACEMOUSE_BASELINE.json](../../configs/SPACEMOUSE_BASELINE.json)。未经重新核对现场状态不自动恢复控制。
@@ -16,7 +18,7 @@
 
 47 项本地离线测试通过，新增验证无跟随时不积累目标、按实测位置换向、松手捕获一次保持、旧旋转不挡平移、10 Hz 更新以及关节预测和异常退出。网络隔离的合成 ROS 停止/断连场景各发布 4 次目标、控制进程均退出 0，并读回确认旋转参数 150/7；日志 `logs/offline-responsive-input-2026-09-18.log`。
 
-17:33 启动前再次确认 Desk Execution/空闲/无错误、FCI 已启用、原 tasl 令牌、sidecar 无 Robot、无机器人连接、11321 空闲、13 项部署哈希一致、原三个容器不变。新版已在 `state/logs/manual-20260919T003322Z-8/` 启动并进入 READY，初始 J4 约 -2.73160 rad，首次回中完成。PC 日志为 `logs/hardware-spacemouse-responsive-input-2026-09-18-01.log`，本轮操作与收尾结果待记录。
+17:33 启动前再次确认 Desk Execution/空闲/无错误、FCI 已启用、原 robot_operator 令牌、sidecar 无 Robot、无机器人连接、11321 空闲、13 项部署哈希一致、原三个容器不变。新版已在 `state/logs/manual-20260919T003322Z-8/` 启动并进入 READY，初始 J4 约 -2.73160 rad，首次回中完成。PC 日志为 `logs/hardware-spacemouse-responsive-input-2026-09-18-01.log`，本轮操作与收尾结果待记录。
 
 ## 17:15–17:23 PDT 对齐官方输入并从调整后的姿态启动
 
@@ -28,7 +30,7 @@
 
 四个修改的 NUC 源文件仅部署到本轮专用 source，13 项清单哈希全部复核。其他容器 PID/启动时间未变。17:15 只读状态仍为 J4=-2.74815 rad，配置下限 -2.7478 rad，Idle、当前及上次运动错误为空；记录在 `logs/pose-before-official-input-2026-09-18.log`。由于起点已经在当前配置范围之外，新模式尚未真机启动；请现场通过 Desk 手动引导调整起点，再读取实际关节角确认。不使用历史 freedrive sidecar，不修改限位或自动恢复。
 
-17:23 用户调整起点后确认继续。重新核对原三个容器 PID/启动时间/RestartCount 不变，专用容器已停、13 项哈希一致、11321 空闲、无既有机器人 TCP 连接，sidecar 无 Robot。Desk 为 Execution、空闲、无错误，FCI 已启用、持有者仍为 tasl。只读 101 个状态的最后样本为 `q=[-0.285649,-0.678866,0.207576,-2.61244,0.1456,2.21356,0.566412]`、TCP `[0.370281,-0.0206666,0.487573]` m、Idle、当前及历史运动错误为空；证据 `logs/preflight-official-input-2026-09-18-01.log`。
+17:23 用户调整起点后确认继续。重新核对原三个容器 PID/启动时间/RestartCount 不变，专用容器已停、13 项哈希一致、11321 空闲、无既有机器人 TCP 连接，sidecar 无 Robot。Desk 为 Execution、空闲、无错误，FCI 已启用、持有者仍为 robot_operator。只读 101 个状态的最后样本为 `q=[-0.285649,-0.678866,0.207576,-2.61244,0.1456,2.21356,0.566412]`、TCP `[0.370281,-0.0206666,0.487573]` m、Idle、当前及历史运动错误为空；证据 `logs/preflight-official-input-2026-09-18-01.log`。
 
 随后启动 `--execute-attended-manual --no-trial-bounds --official-input`，NUC 目录 `state/logs/manual-20260919T002343Z-8/`，PC 日志 `logs/hardware-spacemouse-official-input-2026-09-18-01.log`。已依次通过 precheck、控制器启动与目标订阅检查，进入 READY，首次回中完成后 `armed=true`、`left_button=false`。当前会话仍在运行，最终动作统计及收尾待记录；未执行自动 Home、复位或夹爪动作。
 
@@ -48,7 +50,7 @@
 
 第二轮后只读状态显示 Idle、无错误，末端负载配置为 0.9 kg、附加载荷 0，静态基座 Z 外力估计约 2.70 N。该估计不是负载标定结果；没有修改机器人负载配置。较软参数、摩擦或负载误差对跟随的贡献尚未分离验证，不能把低跟随速度直接归因于其中一项。
 
-入口为 PC [spacemouse_upward_trial.py](../../spacemouse_upward_trial.py)、NUC [run_upward_trial.py](../../nuc/run_upward_trial.py) 和 [upward_trial.py](../../nuc/upward_trial.py)。复用已通过保持测试的 FR3 launch；该 launch 的 `/hil_serl_preflight/unused_equilibrium_pose` 仅在这个明确的向上测试入口中由本次程序发布。原保持观察入口仍检查该话题没有发布者。源文件只写入专用 source，清单现有 12 项；原镜像没有重建。
+入口为 PC [spacemouse_upward_trial.py](../../desktop/spacemouse_upward_trial.py)、NUC [run_upward_trial.py](../../nuc/run_upward_trial.py) 和 [upward_trial.py](../../nuc/upward_trial.py)。复用已通过保持测试的 FR3 launch；该 launch 的 `/hil_serl_preflight/unused_equilibrium_pose` 仅在这个明确的向上测试入口中由本次程序发布。原保持观察入口仍检查该话题没有发布者。源文件只写入专用 source，清单现有 12 项；原镜像没有重建。
 
 向上入口最初 27 项本地离线测试通过，计时修改后 30 项通过，加入连续手动模式后 38 项通过。无外部网络的合成 ROS 测试验证右键停止和输入断开后回收控制进程，并确认动态参数读写与目标订阅。首次把两个模拟场景连续放入同一网络命名空间时，被上一个 ROS master 的端口占用/TIME_WAIT 检查拒绝；改为每个场景单独 `--network none --rm` 容器后通过，没有为此放松真机端口检查。模拟数据仅在 `state/offline-upward/`，与上述真机目录分开。
 
@@ -65,7 +67,7 @@ PC 日志：`hardware-spacemouse-upward-2026-09-18-{01,02,03,04,05}.log`、`upwa
 - 手动模式确认运行参数为平移刚度 2000 N/m、阻尼 89，旋转刚度 50、阻尼 14。平移刚度/阻尼取自仓库 RAM 示例的移动配置，旋转采用较低刚度；没有复制 RAM 的工作区、Home、夹爪或复位动作。保持误差裁剪 ±5 mm/±0.03、积分 0、原碰撞阈值不变。
 - 每次状态验证当前 URDF 的 FK/TCP/雅可比一致性；输入用局部雅可比预测关节位置和速度并限幅。这是额外的软件约束，不能替代机器人限位或环境碰撞判断。
 
-启动前再次确认 Desk Execution、空闲、无错误、FCI 已启用且 tasl 持有令牌；sidecar 未创建 Robot，无既有机器人 TCP 连接，ROS 11321 空闲，13 项部署哈希一致。原三个容器 PID/启动时间/RestartCount 不变。38 项离线测试，以及 `--network none` 合成 ROS 的手动右键退出、手动输入断开、向上模式回归均通过。
+启动前再次确认 Desk Execution、空闲、无错误、FCI 已启用且 robot_operator 持有令牌；sidecar 未创建 Robot，无既有机器人 TCP 连接，ROS 11321 空闲，13 项部署哈希一致。原三个容器 PID/启动时间/RestartCount 不变。38 项离线测试，以及 `--network none` 合成 ROS 的手动右键退出、手动输入断开、向上模式回归均通过。
 
 本轮 NUC 数据：`state/logs/manual-20260918T234731Z-7/`。PC：`logs/preflight-manual-2026-09-18-01.log`、`logs/offline-manual-2026-09-18.log`、`logs/hardware-spacemouse-manual-2026-09-18-01.log` 及 `spacemouse-manual-*` 事件目录。
 
@@ -78,8 +80,8 @@ PC 日志：`hardware-spacemouse-upward-2026-09-18-{01,02,03,04,05}.log`、`upwa
 入口：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py --execute-attended-manual --no-trial-bounds
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial --execute-attended-manual --no-trial-bounds
 ```
 
 此选项只可用于手动模式，明确移除 PC/NUC 会话截止、外层固定时间截止和起点相对位置/角度框；不是取消所有控制约束。原有速度、跟随误差、状态新鲜度、HID/SSH 断连与机器人错误检查仍生效，程序异常/右键退出时 finally 停止专用容器。接近 URDF 限位的起点允许向内退让，预测目标不向限位外推进；不修改 URDF。没有开启自动复位或错误恢复。
@@ -104,7 +106,7 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 
 ## 15:45 PDT 首次真机保持结果
 
-启动前于 15:44 重新读取 Desk、sidecar、NUC 进程和连接：Execution、任务空闲、robotErrors 为空、FCI 已启用且 Desk 持有者仍为 tasl；无待处理控制权请求，sidecar 无 Robot 对象，未发现 NUC 到机器人的既有 TCP 连接或控制进程。专用 ROS 端口 11321 空闲，7 个部署文件哈希一致，容器隔离配置未变。
+启动前于 15:44 重新读取 Desk、sidecar、NUC 进程和连接：Execution、任务空闲、robotErrors 为空、FCI 已启用且 Desk 持有者仍为 robot_operator；无待处理控制权请求，sidecar 无 Robot 对象，未发现 NUC 到机器人的既有 TCP 连接或控制进程。专用 ROS 端口 11321 空闲，7 个部署文件哈希一致，容器隔离配置未变。
 
 15:45:30 启动 `hil-serl-fr3-hold-20260918`，仅运行已审阅的保持入口。状态控制器和笛卡尔阻抗控制器均进入 running，随后完成约 10 秒观测：
 
@@ -123,13 +125,13 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 
 保持结束时，驱动三次提示 `fr3_joint4` 距配置下限约 0.12°：`q ≈ -2.745714 rad`，范围 `[-2.7478, -0.4461] rad`。随后在无网络、只读临时容器内核对固定镜像源码：数值来自 `franka_description/robots/fr3/joint_limits.yaml`，`FrankaHW::checkJointLimits()` 比较实际关节位置与 URDF 限位。当时暂缓移动并建议调整起点；后续核对修正了“必须先调姿态”的判断，采用上方所述保留 Home、只向上微移方案，未放宽限位或隐藏警告。
 
-观测入口与 ROS launcher 均退出 0。关停期间 spawner 报服务连接被关闭；日志还有 ROS 尝试修改专用日志目录权限的警告，日志文件实际成功保存。外层 finally 仅停止本轮新容器，15:45:46 已结束，容器为 Exited、PID=0；主进程 `sleep infinity` 因显式停止退出 143，不是控制器崩溃。15:46 复核没有残留 ROS/Franka 控制进程、11321 已释放、没有 NUC 到机器人的已建立 TCP 连接，Desk 无机器人错误。Desk 的 FCI 启用状态和 tasl 令牌保留原状，未执行模式切换或令牌释放接口。
+观测入口与 ROS launcher 均退出 0。关停期间 spawner 报服务连接被关闭；日志还有 ROS 尝试修改专用日志目录权限的警告，日志文件实际成功保存。外层 finally 仅停止本轮新容器，15:45:46 已结束，容器为 Exited、PID=0；主进程 `sleep infinity` 因显式停止退出 143，不是控制器崩溃。15:46 复核没有残留 ROS/Franka 控制进程、11321 已释放、没有 NUC 到机器人的已建立 TCP 连接，Desk 无机器人错误。Desk 的 FCI 启用状态和 robot_operator 令牌保留原状，未执行模式切换或令牌释放接口。
 
 原三个运行容器的 PID、启动时间和 RestartCount 均与测试前一致。所有测试数据仅写入 HIL-SERL 专用目录；未更改旧文件、容器或服务。没有夹爪动作、演示采集或训练。
 
 证据：
 
-- NUC：`/home/tasl/hil_serl_runtime_20260918/state/logs/hold-20260918T224530Z-8/`，含 `result.json`、`observation.json`、`controller.log`；外层记录 `hardware-attempt-20260918T224547Z.json`。
+- NUC：`${NUC_RUNTIME}/state/logs/hold-20260918T224530Z-8/`，含 `result.json`、`observation.json`、`controller.log`；外层记录 `hardware-attempt-20260918T224547Z.json`。
 - PC：`reproduction/logs/preflight-before-hold-2026-09-18-1544.log`、`hardware-hold-2026-09-18-1545.log`、`postflight-hold-2026-09-18-1546.log`，均被 Git 忽略。
 
 以下保留测试前的准备记录；其中 Created 和“未启动”描述均指准备阶段，当前状态以上述实测结果为准。
@@ -143,20 +145,20 @@ NUC 检查始于 14:50 PDT；机器人状态快照为 14:58:50 PDT。状态可�
 | `rteleop-droid-nuc` | `docker ps -a` 中不存在 |
 | `remote-teleop-ros2`、`remote-teleop-serl-soft`、`rlinf-explore` | 运行中，各自只有 `sleep infinity`；复核时 PID、启动时间不变，RestartCount=0 |
 | `rteleop-rlinf-nuc`、`remote-teleop-serl` | 已退出，保持原状 |
-| NUC 控制进程 | 未发现运行中的 roscore、roslaunch、Franka 控制器或 SERL server；连接快照未见 NUC 到机器人 172.16.0.1 的已建立 TCP 连接 |
-| `freedrive_sidecar` | 宿主机 `tasl` 用户，PID 1797237，监听 4243；由历史 SSH 会话启动，不属于上述容器 |
+| NUC 控制进程 | 未发现运行中的 roscore、roslaunch、Franka 控制器或 SERL server；连接快照未见 NUC 到机器人 ${ROBOT_IP} 的已建立 TCP 连接 |
+| `freedrive_sidecar` | 宿主机 `robot_operator` 用户，PID 1797237，监听 4243；由历史 SSH 会话启动，不属于上述容器 |
 | sidecar 状态 | GET `/ping` 返回 `in_freedrive=false`；GET `/state` 返回 `no robot object` |
 | `franka-robot-server.service` | inactive/dead、disabled、MainPID=0 |
-| 9 个旧 DROID `tail -F` | NUC 上属于 `tasl` 的 SSH 会话；训练 PC 上可见对应旧用户 SSH 日志跟踪进程，未终止 |
+| 9 个旧 DROID `tail -F` | NUC 上属于 `robot_operator` 的 SSH 会话；训练 PC 上可见对应旧用户 SSH 日志跟踪进程，未终止 |
 | FR3 系统版本 | 5.9.2 |
 | Desk 执行模式 | `Execution`；`execution.running=false` |
-| Desk 控制权 | `activeToken.ownedBy=tasl`，`fciActive=true`，无待处理控制权请求 |
+| Desk 控制权 | `activeToken.ownedBy=robot_operator`，`fciActive=true`，无待处理控制权请求 |
 | 安全状态 | `safetyControllerStatus=Work`、`stoState=SafeTorqueOn`、7 个 `brakeState=Unlocked` |
 | 错误与工具配置 | `robotErrors=[]`、无 activeRecovery；末端质量约 0.9 kg，COM Z 约 0.057 m |
 
 FCI 已启用是读取到的既有状态，不是本轮启用。Desk 控制权持有者与实际 libfranka 控制进程是不同信息；上述快照不能证明所有其他客户端均已退出。安全输入字段不能代替现场确认急停位置及可触及性。
 
-sidecar 源码中的 GET `/ping`、`/state` 不创建 Robot 对象。POST `/freedrive/on` 会创建 Robot、可能清错并修改碰撞/引导设置；POST `/freedrive/off` 也有控制写入，本轮均未调用。访问日志含来自训练 PC `172.16.0.3` 的 `/ping` 记录，不能仅凭日志确定当前前端的使用者或运行状态。
+sidecar 源码中的 GET `/ping`、`/state` 不创建 Robot 对象。POST `/freedrive/on` 会创建 Robot、可能清错并修改碰撞/引导设置；POST `/freedrive/off` 也有控制写入，本轮均未调用。访问日志含来自训练 PC `${DESKTOP_IP}` 的 `/ping` 记录，不能仅凭日志确定当前前端的使用者或运行状态。
 
 Desk 状态端点根据机器人实际提供的 `/desk/app.8858e4a7df26ab419b1a.js` 定位。仅连接以下只读 WebSocket、接收首条状态后关闭，没有发送应用消息或申请令牌：
 
@@ -202,7 +204,7 @@ sha256:d56016766146580ba8e7e2e0d4fa191a7f902ec8dc54a7ae06387cb1d9a7f151
 2026-09-18 15:19 PDT 创建专用运行目录和容器：
 
 ```text
-目录：/home/tasl/hil_serl_runtime_20260918/
+目录：${NUC_RUNTIME}/
 容器：hil-serl-fr3-hold-20260918
 容器 ID：8488aa9d251391c4366de4690fe2230313adca56e701621117ce0528ffff142b
 创建时状态：Created（未启动，PID=0）
@@ -210,7 +212,7 @@ sha256:d56016766146580ba8e7e2e0d4fa191a7f902ec8dc54a7ae06387cb1d9a7f151
 默认命令：sleep infinity
 ```
 
-准确配置见 [hold_container.json](../../nuc/hold_container.json)。容器根文件系统只读，source 目录只读，state 目录是专用可写挂载；只挂载这两个 HIL-SERL 目录，无设备映射、无 privileged、无自动重启。`/tmp`、`/run` 使用临时文件系统，HOME、ROS、HF、UV、W&B 缓存及日志路径均指向专用 state。NUC 顶层运行目录仅 tasl 可遍历；容器通过补充组访问新目录，未修改其他用户目录权限。
+准确配置见 [hold_container.json](../../nuc/hold_container.json)。容器根文件系统只读，source 目录只读，state 目录是专用可写挂载；只挂载这两个 HIL-SERL 目录，无设备映射、无 privileged、无自动重启。`/tmp`、`/run` 使用临时文件系统，HOME、ROS、HF、UV、W&B 缓存及日志路径均指向专用 state。NUC 顶层运行目录仅 robot_operator 可遍历；容器通过补充组访问新目录，未修改其他用户目录权限。
 
 新容器配置使用 host network 连接 FR3；这不是网络安全隔离。固定 ROS master 为 `127.0.0.1:11321`，首轮保持结束后已确认端口和控制进程释放。
 
@@ -245,7 +247,7 @@ docker stop --time 15 hil-serl-fr3-hold-20260918
 独立运行遵循以下边界，运行目录及未启动容器已按上述配置创建：
 
 - PC 新增数据、日志、模型和缓存限于当前用户的 HIL-SERL 专用目录；`reproduction/logs/`、`reproduction/data/`、`reproduction/runtime/` 均不进入 Git。
-- NUC 使用新的 HIL-SERL 专用运行目录 `/home/tasl/hil_serl_runtime_20260918/`；创建前检查目录和容器名不存在，没有覆盖已有内容。
+- NUC 使用新的 HIL-SERL 专用运行目录 `${NUC_RUNTIME}/`；创建前检查目录和容器名不存在，没有覆盖已有内容。
 - 新容器只挂载上述专用目录；不挂载其他人的 home、工作区、数据集、Docker socket 或完整 `/dev`。首次保持测试不需要串口设备。
 - 新运行显式设置独立 `HOME`、`ROS_HOME`、`ROS_LOG_DIR`、`XDG_CACHE_HOME`；未来涉及 HF、SERL、W&B 等组件时也须明确缓存/输出路径。保留依赖库当前需要的安装路径，不删除可能被软件引用的旧安装缓存。
 - 新运行使用独立的可写状态目录和临时目录；根文件系统只读配置已通过离线检查及首轮真机保持验证。
@@ -278,6 +280,6 @@ PC 新增 read_latest_input：在非阻塞模式下读至队列为空，仅发�
 
 本轮 `manual-20260919T004139Z-8` 有 2760 条循环记录、345 次目标发布，最大 TCP 位移 105.820 mm、转角 12.532°，峰值实测 TCP 速度约 48.09 mm/s、最大关节速度 0.15425 rad/s，最低命令成功率 1.0、无机器人错误。PC 实际清空 2196 份 HID 报文，460 批含两份报文，并成功记录双键停止。用户正常双键结束，控制器退出 0，17:42:45 专用容器已停止。
 
-17:45 收尾再次确认 PC/NUC 本轮进程均无残留、专用容器 PID=0、11321 空闲、无既有机器人 TCP 连接；Desk Execution、任务空闲、无错误。机械臂仍通电，FCI 开关和原 tasl 令牌未改，没有远程关整机电源。原三个容器 PID/启动时间/重启次数不变；未触碰其他部署或旧文件。
+17:45 收尾再次确认 PC/NUC 本轮进程均无残留、专用容器 PID=0、11321 空闲、无既有机器人 TCP 连接；Desk Execution、任务空闲、无错误。机械臂仍通电，FCI 开关和原 robot_operator 令牌未改，没有远程关整机电源。原三个容器 PID/启动时间/重启次数不变；未触碰其他部署或旧文件。
 
 可用配置、源码 SHA256、测试结果与用户反馈已保存至 [基线配置](../../configs/SPACEMOUSE_BASELINE.json)。证据为 `logs/metrics-latest-hid-2026-09-18-01.json`、`logs/shutdown-2026-09-18.log` 和 `logs/spacemouse-manual-20260919T004140Z/input.jsonl`。后续从该基线恢复前重新核对当前服务归属与操作者状态；当前停止全部真机测试。

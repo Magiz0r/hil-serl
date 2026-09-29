@@ -7,7 +7,7 @@ from pathlib import Path
 import socket
 import time
 import threading
-from pilot_gripper import PREPARE_ACTIONS
+from reproduction.portal.pilot_gripper import PREPARE_ACTIONS
 
 ACTIONS = ('lock', 'start', 'set_home', 'home', 'set_custom_home', 'custom_home', 'recovery_check', 'policy_start', *PREPARE_ACTIONS)
 

@@ -4,12 +4,12 @@
 
 ## 当前进展
 
-整理于 **2026-09-29**，最近实机实验为 2026-09-26 UTC（本地 09-25）。日常入口为 TASL FR3 · Capture Console，支持双视角采集、Task / Layout、人工标签、Home、夹爪准备，以及 AutoSERL 从头训练、选择模型续训、冻结评估和数据分析。实时服务状态请看网页；文档中的日期表示验证时间。
+整理于 **2026-09-29**，最近实机实验为 2026-09-26 UTC（本地 09-25）。日常入口为 FR3 · Capture Console，支持双视角采集、Task / Layout、人工标签、Home、夹爪准备，以及 AutoSERL 从头训练、选择模型续训、冻结评估和数据分析。实时服务状态请看网页；文档中的日期表示验证时间。
 
 | 项目 | 已验证内容 |
 | --- | --- |
 | Python / GPU | 独立 Conda `hilserl`，Python 3.10.21，JAX 0.4.35 / jaxlib 0.4.34，RTX 4090 计算通过 |
-| 离线功能 | 2026-09-29 完整回归 305 项通过，覆盖采集、HTTP、Chrome 界面、Home、夹爪、续训和评估；使用模拟硬件 |
+| 离线功能 | 2026-09-29 完整回归 307 项通过，覆盖采集、HTTP、Chrome 界面、Home、夹爪、续训和评估；使用模拟硬件 |
 | 相机 | 外部视角已切至第三台 ZED 2i（USB `3.4.1`），腕部仍为 ZED-M；两路 15 FPS 读取、约 10 Hz 记录 |
 | 夹爪 | Robotiq 2F-85 USB-RS485；FC03 通过，已激活且无错误；左右键开合、接触停止和双键退出实测通过 |
 | 机械臂 | FR3 系统 5.9.2；保持、六轴平移和旋转实测，最后一轮无机器人错误 |
@@ -24,42 +24,36 @@
 
 普通采集启动：`bash ~/hil-serl/start_capture.sh`；当前 AutoSERL 使用 `bash ~/hil-serl/start_capture.sh --autoserl-demo`；完整关闭：`bash ~/hil-serl/stop_capture.sh`。启动不开始录制、Home 或策略动作；训练区“准备任务”加载模型后仍暂停。仅查看网页和相机可加 `--web-only`。详见 [Capture Console 说明](docs/CAPTURE_CONSOLE.md) 和 [AutoSERL 操作手册](autoserl/README.md)。
 
-| 路径 | 用途 |
+```text
+reproduction/
+├── portal/       # 网页、录制、实验管理；static/ 保存前端
+├── desktop/      # SpaceMouse 与夹爪通信桥
+├── autoserl/     # 示范导出、自动干预、训练、评估及专项检查
+├── nuc/          # NUC 控制源码、构建与部署清单
+├── tools/        # 按需运行的检查、预览和部署工具
+├── tests/        # Desktop / 网页 / 控制适配的离线回归
+├── configs/      # 当前任务及硬件配置
+├── environment/  # 安装脚本与依赖锁文件
+├── docs/         # 操作手册；history/ 保存已脱敏的历史记录
+└── data/、logs/、runtime/  # 本机产物，Git 忽略
+```
+
+| 入口 | 用途 |
 | --- | --- |
-| [../start_capture.sh](../start_capture.sh)、[../stop_capture.sh](../stop_capture.sh) | 稳定的日常启动与完整关闭入口 |
-| [capture_portal.py](capture_portal.py)、[start_capture_console.py](start_capture_console.py) | Bash 启动管理、相机/网页及机器人控制会话生命周期 |
-| [record_manual_pilot.py](record_manual_pilot.py)、`pilot_*.py` | HTTP、采集、任务/Layout、门控、数据校验、记录和 MP4 |
-| [pilot_capture.html](pilot_capture.html)、[pilot_ui/](pilot_ui/) | 原生 HTML/CSS/JavaScript；含与真实接口隔离的演示模式 |
-| [autoserl/](autoserl/) | 示范导出、自动干预、异步在线 SAC、续训、冻结评估与 W&B 同步 |
-| [autoserl/RESULTS.md](autoserl/RESULTS.md) | 当前训练 / 独立评估结果、模型来源与尚待验证的问题 |
-| [docs/README.md](docs/README.md) | 当前手册、模块索引和历史文档入口 |
-| [docs/HARDWARE.md](docs/HARDWARE.md) | 当前硬件适配、数据隔离与待完成事项 |
-| [docs/SPACEMOUSE.md](docs/SPACEMOUSE.md) | 官方映射、当前操作方式及实现差异 |
-| [docs/GRIPPER.md](docs/GRIPPER.md) | SpaceMouse 左右键接入 Robotiq RS485、隔离部署与验证范围 |
-| [docs/PILOT_CAPTURE.md](docs/PILOT_CAPTURE.md) | 当前手动采集顺序、记录格式与数据核验 |
-| [docs/CAPTURE_CONSOLE.md](docs/CAPTURE_CONSOLE.md) | 新采集工作台、无设备演示、真实接口与桌面/窄屏验证 |
-| [configs/](configs/) | 相机端口配置与已验证的 SpaceMouse 基线快照 |
-| [environment/](environment/) | Python 依赖约束、Conda 锁文件和安装说明 |
-| [nuc/PREFLIGHT.md](nuc/PREFLIGHT.md) | 恢复真机测试前的核对与独立 NUC 部署说明 |
-| [nuc/README.md](nuc/README.md) | ROS1 控制、Home 插件、夹爪部署与构建清单索引 |
-| [tests/](tests/) | 不连接硬件的单元测试 |
-| [docs/history/](docs/history/) | 安装历史、逐轮硬件记录和旧 VR 参考手册 |
-| `logs/`、`data/`、`runtime/` | 本机证据、数据和运行产物，Git 忽略 |
+| [portal/README.md](portal/README.md) | 网页模块分工与静态资源 |
+| [desktop/README.md](desktop/README.md) | 实际运行需要的桌面控制桥 |
+| [tools/README.md](tools/README.md) | 8 个独立 Python 工具及设备权限配置 |
+| [autoserl/README.md](autoserl/README.md) | 当前训练、续训、评估操作 |
+| [autoserl/RESULTS.md](autoserl/RESULTS.md) | 实验数据与模型来源 |
+| [nuc/README.md](nuc/README.md) | 保持原部署路径的 NUC 源码与插件 |
+| [environment/README.md](environment/README.md) | 安装、锁文件与离线验证 |
+| [docs/README.md](docs/README.md) | 当前操作手册及历史索引 |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | 文档脱敏、占位约定及检查范围 |
 
-保留以下已使用的脚本入口：
-
-| 脚本 | 行为 |
-| --- | --- |
-| [install-packages.sh](install-packages.sh) | 在独立 Conda 环境安装依赖 |
-| [offline_smoke.py](offline_smoke.py)、[offline_learning.py](offline_learning.py) | 离线依赖/GPU 与合成学习验证 |
-| [probe_cameras.py](probe_cameras.py) | 只采集相机，默认读取 `configs/cameras.json` |
-| [probe_robotiq_readonly.py](probe_robotiq_readonly.py) | 只读夹爪状态 |
-| [probe_spacemouse.py](probe_spacemouse.py) | 只读 SpaceMouse 输入，不连接机器人 |
-| [spacemouse_upward_trial.py](spacemouse_upward_trial.py) | 显式选择模式后启动真实机械臂控制 |
-| [deploy_gripper.py](deploy_gripper.py) | 部署独立 NUC 夹爪源码，不启动硬件 |
-| [validate_pilot.py](validate_pilot.py) | 校验已保存 episode 的样本、时间及文件摘要 |
-
-Desktop 各脚本使用同目录导入，NUC 部署按文件名和摘要核验。因此运行源码继续保留稳定路径；功能分组和职责见 [文档索引](docs/README.md)。本机数据、日志、运行文件和依赖缓存通过 `.gitignore` 与可提交源码分开，不删除已有实验产物。
+2026-09-29 将原顶层 25 个 Python 文件分入三个目录；内部导入和子进程入口同步
+更新为包模块。根目录 Bash 启停命令不变；手工运行 Python 时从仓库根目录使用
+`python -m reproduction.<分组>.<模块>`。NUC 源码、控制参数、数据与日志位置不变，
+没有为了目录整理重新部署或启动控制器。
 
 ## 离线复验
 

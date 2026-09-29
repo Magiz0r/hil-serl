@@ -5,8 +5,8 @@
 在原六轴手动入口上添加 `--with-gripper`：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input --with-gripper
 ```
 
@@ -31,7 +31,7 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 
 夹爪部署与机械臂部署分离。夹爪使用单独的临时容器 `hil-serl-robotiq-attended-20260921`，同一固定镜像，`--network none`、只读根文件系统、无 privileged、清除 capabilities；仅映射已确认的 FTDI RS485 设备。进程以 NUC 当前用户运行，通过设备所属组访问串口，同时使用 advisory exclusive 和 `TIOCEXCL`。
 
-夹爪部署和运行在 NUC 只写 `/home/tasl/hil_serl_runtime_20260918/gripper_source/`、`gripper-source-sha256.json` 和 `gripper_state/`，与旧服务分离；源目录只读挂载。PC 日志放在本次 `spacemouse-manual-*` 内的 `gripper-events.jsonl` 和 `gripper-ssh.stderr.log`。临时容器退出自动删除。
+夹爪部署和运行在 NUC 只写 `${NUC_RUNTIME}/gripper_source/`、`gripper-source-sha256.json` 和 `gripper_state/`，与旧服务分离；源目录只读挂载。PC 日志放在本次 `spacemouse-manual-*` 内的 `gripper-events.jsonl` 和 `gripper-ssh.stderr.log`。临时容器退出自动删除。
 
 独立 SSH 与读写线程处理串口，机械臂输入循环不等待 Modbus。夹爪输入心跳或主循环刷新中断时停止夹指；夹爪故障会使 PC 输入入口退出，机械臂按原逻辑断连回收。软件退出不替代硬件急停；通信丢失时不能保证停止写入成功，日志会记录停止是否确认。
 
@@ -40,13 +40,13 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 在夹爪专用容器不存在时部署；不会启动硬件，也不写原机械臂 source：
 
 ```bash
-python3 reproduction/deploy_gripper.py --deploy
+python3 -m reproduction.tools.deploy_gripper --deploy
 ```
 
 NUC 只读状态检查（使用短暂、无网络的夹爪容器，只发送 FC03）：
 
 ```bash
-ssh FrankaNUC python3 /home/tasl/hil_serl_runtime_20260918/gripper_source/run_gripper.py --probe-only
+ssh robot-nuc python3 ${NUC_RUNTIME}/gripper_source/run_gripper.py --probe-only
 ```
 
 72 项离线测试通过，覆盖按钮释放/双键优先、短按采样、去重、心跳失效、串口慢响应、激活授权和中止回收、停止与打开/复位的区别。2026-09-21 只读实机返回已激活 `gACT=1,gSTA=3`、`gGTO=0,gPO=3` 和通信超时标志 `gFLT=9`；正式启动时持续 FC03 读取后，该标志已清除为 0，没有发送激活或复位命令。

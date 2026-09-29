@@ -1,16 +1,17 @@
 # HIL-SERL: Precise and Dexterous Robotic Manipulation via Human-in-the-Loop Reinforcement Learning
 
-> **本 Fork 的 FR3 工作入口：** [复现总览与目录导航](reproduction/README.md) · [采集网页操作手册](reproduction/docs/CAPTURE_CONSOLE.md) · [AutoSERL 离线适配](reproduction/autoserl/README.md)。已接入真实双相机采集、SpaceMouse、Robotiq RS485、独立 DROID / 自定义 Home；完整真实在线 RL 尚未验证。下方保留官方 HIL-SERL 说明。
+> **本 Fork 的 FR3 工作入口：** [复现总览与目录导航](reproduction/README.md) · [采集网页操作手册](reproduction/docs/CAPTURE_CONSOLE.md) · [AutoSERL 训练与评估](reproduction/autoserl/README.md)。已接入真实采集、在线训练、模型续训与冻结评估；当前独立策略成功率为 1/10，来源及局限见 [实验结果](reproduction/autoserl/RESULTS.md)。下方保留官方 HIL-SERL 说明。
 
 本实验室已配置环境中的常用入口，在仓库根目录运行：
 
 ```bash
 bash start_capture.sh                  # 网页、相机及机器人控制连接；显式 Start 才录制
+bash start_capture.sh --autoserl-demo  # 当前 FMB 插入示范、训练和评估使用的模式
 bash start_capture.sh --web-only       # 只打开网页与相机
 bash stop_capture.sh                   # 保存当前记录后关闭本工作台
 ```
 
-本机网页 `http://127.0.0.1:8765/`；Tailscale 地址由启动脚本打印。新机器先阅读 [环境说明](reproduction/environment/README.md)和 [NUC 部署说明](reproduction/nuc/PREFLIGHT.md)。无设备预览使用 `python3 reproduction/preview_pilot.py`，默认端口 8766。
+本机网页 `http://127.0.0.1:8765/`；Tailscale 地址由启动脚本打印。新机器先阅读 [环境说明](reproduction/environment/README.md)和 [NUC 部署说明](reproduction/nuc/PREFLIGHT.md)。无设备预览使用 `python3 -m reproduction.tools.preview_pilot`，默认端口 8766。
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Static Badge](https://img.shields.io/badge/Project-Page-a)](https://hil-serl.github.io/)
@@ -27,11 +28,10 @@ HIL-SERL provides a set of libraries, env wrappers, and examples to train RL pol
 🎬: [HIL-SERL video](https://www.youtube.com/watch?v=GuD_-zhJgbs)
 
 **Table of Contents**
-- [HIL-SERL: Precise and Dexterous Robotic Manipulation via Human-in-the-Loop Reinforcement Learning](#serl-a-software-suite-for-sample-efficient-robotic-reinforcement-learning)
+- [HIL-SERL: Precise and Dexterous Robotic Manipulation via Human-in-the-Loop Reinforcement Learning](#hil-serl-precise-and-dexterous-robotic-manipulation-via-human-in-the-loop-reinforcement-learning)
   - [Installation](#installation)
   - [Overview and Code Structure](#overview-and-code-structure)
   - [Run with Franka Arm](#run-with-franka-arm)
-  <!-- - [Contribution](#contribution) -->
   - [Citation](#citation)
 
 ## Installation

@@ -1,5 +1,7 @@
 # SpaceMouse 官方映射与当前预检入口
 
+> 公开归档中的账号、设备地址及机器标识已脱敏，Desktop 脚本路径已按当前目录迁移。示例不是原始部署凭据；运行前请看 [当前手册](../../README.md) 和 [占位约定](../PRIVACY.md)。
+
 > 历史记录归档：以下状态与命令按当时记录保留；当前入口和状态见 [复现总览](../../README.md)。旧路径仅供追溯。
 
 本次核对基于官方固定提交 `c32939bccb65f3b8c43a9f9add3d322d4ab0264a`。下述 `SpaceMouseExpert`、`SpacemouseIntervention`、`RelativeFrame`、RAM 配置与该提交一致；`FrankaEnv` 的既有相机适配没有修改动作计算。
@@ -42,11 +44,11 @@ next_rotation = Rotation.from_rotvec(action[3:6] * ACTION_SCALE[1]) * measured_r
 
 ## 当前硬件预检的区别
 
-`reproduction/spacemouse_upward_trial.py` 是独立硬件诊断入口，并非官方 actor/演示环境。六轴符号与次序采用上述官方映射。此前实机测试采用左键使能、右键结束和 0.15 死区，这些是本轮预检实现；现已新增以下入口对齐官方六轴输入和无按键使能语义：
+`reproduction/desktop/spacemouse_upward_trial.py` 是独立硬件诊断入口，并非官方 actor/演示环境。六轴符号与次序采用上述官方映射。此前实机测试采用左键使能、右键结束和 0.15 死区，这些是本轮预检实现；现已新增以下入口对齐官方六轴输入和无按键使能语义：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
-  reproduction/spacemouse_upward_trial.py \
+PYTHONDONTWRITEBYTECODE=1 python -u \
+  -m reproduction.desktop.spacemouse_upward_trial \
   --execute-attended-manual --no-trial-bounds --official-input
 ```
 
@@ -76,6 +78,6 @@ PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -u \
 
 本轮 `manual-20260919T004139Z-8` 有 2760 条循环记录、345 次目标发布，最大 TCP 位移 105.820 mm、转角 12.532°，峰值实测 TCP 速度约 48.09 mm/s、最大关节速度 0.15425 rad/s，最低命令成功率 1.0、无机器人错误。PC 实际清空 2196 份 HID 报文，460 批含两份报文，并成功记录双键停止。用户正常双键结束，控制器退出 0，17:42:45 专用容器已停止。
 
-17:45 收尾再次确认 PC/NUC 本轮进程均无残留、专用容器 PID=0、11321 空闲、无既有机器人 TCP 连接；Desk Execution、任务空闲、无错误。机械臂仍通电，FCI 开关和原 tasl 令牌未改，没有远程关整机电源。原三个容器 PID/启动时间/重启次数不变；未触碰其他部署或旧文件。
+17:45 收尾再次确认 PC/NUC 本轮进程均无残留、专用容器 PID=0、11321 空闲、无既有机器人 TCP 连接；Desk Execution、任务空闲、无错误。机械臂仍通电，FCI 开关和原 robot_operator 令牌未改，没有远程关整机电源。原三个容器 PID/启动时间/重启次数不变；未触碰其他部署或旧文件。
 
 可用配置、源码 SHA256、测试结果与用户反馈已保存至 [基线配置](../../configs/SPACEMOUSE_BASELINE.json)。证据为 `logs/metrics-latest-hid-2026-09-18-01.json`、`logs/shutdown-2026-09-18.log` 和 `logs/spacemouse-manual-20260919T004140Z/input.jsonl`。后续从该基线恢复前重新核对当前服务归属与操作者状态；当前停止全部真机测试。

@@ -8,4 +8,5 @@ if [[ ! -x "$capture_python" ]]; then
   exit 1
 fi
 export PYTHONDONTWRITEBYTECODE=1
-exec "$capture_python" "$capture_repo/reproduction/capture_portal.py" start "$@"
+cd -- "$capture_repo"
+exec "$capture_python" -m reproduction.portal.capture_portal start "$@"

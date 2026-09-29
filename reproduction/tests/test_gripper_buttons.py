@@ -5,8 +5,8 @@ import unittest
 from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from gripper_buttons import GripperButtons
-from spacemouse_upward_trial import read_latest_input
+from reproduction.desktop.gripper_buttons import GripperButtons
+from reproduction.desktop.spacemouse_upward_trial import read_latest_input
 
 
 class GripperButtonTests(unittest.TestCase):

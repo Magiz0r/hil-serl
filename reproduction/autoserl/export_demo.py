@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from reproduction.pilot_dataset import validate_episode
+from reproduction.portal.pilot_dataset import validate_episode
 
 PROTOCOL = 'autoserl_fr3_demo_v1'
 CAMERAS = {'wrist_1': 'external', 'wrist_2': 'wrist'}

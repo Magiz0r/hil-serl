@@ -7,8 +7,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from nuc.latest_jsonl import LatestJSONL
-from pilot_health import HealthJournal
-from record_manual_pilot import LocalTail
+from reproduction.portal.pilot_health import HealthJournal
+from reproduction.portal.record_manual_pilot import LocalTail
 
 
 def append(path, row):
@@ -58,7 +58,7 @@ def test_producer_receipt_timestamp_survives_delayed_poll_and_partial_append(tmp
     path = tmp_path / 'events.jsonl';path.touch()
     reader = LocalTail(path)
     append(path, {'phase':'ready', 'pc_received_at':100.})
-    with patch('record_manual_pilot.time.monotonic',return_value=101.):
+    with patch('reproduction.portal.record_manual_pilot.time.monotonic',return_value=101.):
         row = reader.poll()
         assert row['pc_received_at'] == 100.  # Already stale, not magically fresh at 101.
         with path.open('ab') as stream:stream.write(b'{"phase":')

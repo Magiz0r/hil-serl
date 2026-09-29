@@ -1,4 +1,4 @@
-# TASL FR3 · Capture Console
+# FR3 · Capture Console
 
 当前 HIL-SERL / SpaceMouse 的真实数据采集网页，支持多任务、Prompt、Layout、双相机、采集、DROID Home 和历史记录；AutoSERL 模式增加在线训练、模型续训、冻结评估和数据分析。沿用原有录制器、输入门控、NUC 独立控制容器和 RS485 夹爪路径。无前端构建步骤，不需要 RLinf/OpenPI 模型服务或 RTC。
 
@@ -14,14 +14,14 @@ bash ~/hil-serl/start_capture.sh
 该模式固定夹爪，采用与示范一致的 AutoSERL 动作与控制配置；不能复用普通手动模式
 的已运行服务。连接后仍保持锁定，模型须单独准备并点击开始。流程见下文 AutoSERL 一节。
 
-本机地址是 <http://127.0.0.1:8765/>，Tailscale 地址是 <http://100.79.65.37:8765/>。直接打开即可，无需 access 链接、登录或 Cookie 验证。启动输出及 `reproduction/runtime/capture-console/service.json` 提供普通访问地址。能够连接该地址的用户均可使用网页。
+本机地址是 <http://127.0.0.1:8765/>，实际 Tailscale 地址由启动输出及 `reproduction/runtime/capture-console/service.json` 提供。直接打开即可，无需 access 链接、登录或 Cookie 验证。能够连接该地址的用户均可使用网页。公开文档不再记录机器的远程地址，示例约定见 [PRIVACY.md](PRIVACY.md)。
 
 此命令自动使用 `hilserl` Conda 环境，在后台启动网页和相机，启用当前可用的 Tailscale 地址，并请求连接机器人控制；有桌面环境时自动打开浏览器。重复运行会复用已有工作台。准备机械臂电源、Desk 解锁和 FCI 后运行，终端等待实际状态并显示 `[READY]`；仅网页响应时只显示 `[WEB]`。控制失败显示 `[PARTIAL]`、返回码 2，网页继续运行，处理现场问题后可在网页点击“连接控制”重试。
 
 当前 Desktop 已配置持久设备权限，日常启动和停止均不需要 sudo。新装系统可由管理员执行一次：
 
 ```bash
-sudo bash ~/hil-serl/reproduction/setup_capture_permissions.sh zwqty
+sudo bash ~/hil-serl/reproduction/tools/setup_capture_permissions.sh "$USER"
 ```
 
 此脚本安装 `/etc/udev/rules.d/99-z-hilserl-capture.rules`，对配置中的外部相机 USB 位置、腕部 ZED-M 和 SpaceMouse `256f:c63a` 添加当前账号主用户组的读写 ACL。设备重建时由 udev 自动应用，避免依赖桌面登录会话的临时用户 ACL；保留设备原来的所有者和其他账号权限。规则安装后会向当前匹配设备发送 udev change 事件，立即生效。脚本不保存管理员密码。若移动外部相机的 USB 端口，需同步修改相机配置和此安装脚本中的端口匹配。
@@ -49,13 +49,13 @@ bash ~/hil-serl/start_capture.sh --web-only
 
 可加 `--no-open` 只打印网址；`--port 8765` 指定端口。脚本默认使用 `~/miniconda3/envs/hilserl/bin/python`，其他安装位置可设置 `CAPTURE_PYTHON`。后台网页日志位于 `reproduction/runtime/capture-console/portal-<UTC>.log`，启动脚本退出或终端关闭不等于关闭服务。
 
-低层前台入口仍可使用 `python reproduction/start_capture_console.py --tailscale`，默认只开网页；追加 `--connect` 请求控制连接。网页加载、刷新、切换任务、拍 Layout 和看记录本身不启动控制器。
+低层前台入口仍可使用 `python -m reproduction.portal.start_capture_console --tailscale`，默认只开网页；追加 `--connect` 请求控制连接。网页加载、刷新、切换任务、拍 Layout 和看记录本身不启动控制器。
 
 普通手动模式沿用：`--speed-scale 2 --translation-scale 1.6 --rotation-scale 3 --rotation-response responsive --gripper-speed 192 --pilot-gate --official-home`。AutoSERL 使用单位动作尺度、standard 响应及专用 COMPLIANCE，具体差异见 [AutoSERL 手册](../autoserl/README.md)。两种模式均不自动恢复机械臂错误。准备失败时显示错误和本次预检日志路径；任务、历史记录和可用的相机仍可使用。
 
 “断开控制”关闭本网页拥有的录制器和控制进程；正在采集时先 Stop。连接途中可取消，取消后的预检结果不会启动控制器。使用低层前台入口时，该终端 Ctrl-C 会清理本网页的控制连接和相机。不会接管其他容器、修改 Desk 开关或执行 Home。连接日志位于 `reproduction/runtime/capture-console/<UTC>_<随机后缀>/`。
 
-已有 `--pilot-gate` 控制会话也可继续使用原来的 `record_manual_pilot.py --session ... --cameras ...`；该入口保留原有单会话行为。服务连接管理和跨会话记录库使用上面的新入口。避免两个网页进程同时占用相机。
+已有 `--pilot-gate` 控制会话也可使用 `python -m reproduction.portal.record_manual_pilot --session ... --cameras ...`；该入口保留原有单会话行为。服务连接管理和跨会话记录库使用上面的入口。避免两个网页进程同时占用相机。
 
 ## 任务、Layout 和记录
 
@@ -76,7 +76,7 @@ bash ~/hil-serl/start_capture.sh --web-only
 MP4 使用 H.264、原图分辨率、10 FPS，按 `samples.jsonl` 的实际采样间隔重采样，保持录像总时长（允许一个视频帧的量化误差）。每次只编码一条记录，原始 JPEG、轨迹、时间戳、结果和校验值均保留；`videos.json` 单独记录导出状态和错误，编码失败不会把实验结果改成失败。关闭 portal 会中止未完成的编码，下次启动重新生成。运行环境需要 `ffmpeg` 和 `ffprobe`（当前 Desktop 已安装）。也可离线补生成：
 
 ```bash
-python3 reproduction/pilot_video.py reproduction/data/manual_capture/pilot_XXX/episode_0001
+python3 -m reproduction.portal.pilot_video reproduction/data/manual_capture/pilot_XXX/episode_0001
 ```
 - 成功率只统计明确 success/failure。不完整、未标注、作废单列；设备异常产生的 incomplete 保留异常状态，可补充备注。删除记录为软删除，原始图像、轨迹保留在磁盘。
 
@@ -107,7 +107,7 @@ Home 是独立操作：采集中拒绝，Home 中禁止 Start，Stop 可中断�
 - **将当前位置设为自定义 Home**：先 Stop 并等待停止，读取此刻七个实测关节角并保存；已有目标时确认覆盖。设置本身不执行回位。
 - **返回自定义**：使用自己保存的关节姿态。尚未设置时不可点击；与 DROID Home 互不覆盖，采用相同的平滑轨迹、完成判定和中断机制。
 
-自定义目标存于 NUC `/home/tasl/hil_serl_runtime_20260918/state/custom_home.json`（容器内 `/hil-serl-state/custom_home.json`），断开控制、重启网页和 NUC 后保留。仅用户设置时写入；文件无效时显示自定义目标错误，DROID Home 仍独立可用。保存期间禁止 Start 和两种返回，Stop 保持可达。Start 仍从当前姿态开始，不会自动返回任一 Home。`POST /command` 的 `set_custom_home` 和 `custom_home` 分别设置与返回；`pilot.custom_home` 返回保存状态、目标、时间和残差，`pilot.active_home` 区分当前返回目标。演示模式只模拟会话目标，不写真实配置。
+自定义目标存于 NUC `${NUC_RUNTIME}/state/custom_home.json`（容器内 `/hil-serl-state/custom_home.json`），断开控制、重启网页和 NUC 后保留。仅用户设置时写入；文件无效时显示自定义目标错误，DROID Home 仍独立可用。保存期间禁止 Start 和两种返回，Stop 保持可达。Start 仍从当前姿态开始，不会自动返回任一 Home。`POST /command` 的 `set_custom_home` 和 `custom_home` 分别设置与返回；`pilot.custom_home` 返回保存状态、目标、时间和残差，`pilot.active_home` 区分当前返回目标。演示模式只模拟会话目标，不写真实配置。
 
 控制端为自定义目标加载独立的 `hil_serl_custom_home_controller` 实例；更新目标仅卸载/重载未运行的自定义实例，不修改 `hil_serl_official_home_controller` 的参数。无需重新构建 C++ 插件；部署 Python 控制代码后，下次连接生效。旧的自定义末端 Home 模式仍可通过不带 `--official-home` 的原入口使用。
 
@@ -140,16 +140,20 @@ W&B 可由独立进程同步数值，详见 [AutoSERL 手册](../autoserl/README
 ## 演示模式
 
 ```bash
-python3 reproduction/preview_pilot.py --port 8766 --tailscale
+python3 -m reproduction.tools.preview_pilot --port 8766 --tailscale
 ```
 
 打开 <http://127.0.0.1:8766/?demo=1>，或 Tailscale 同端口。始终显示演示标识；双相机为示意图，任务、Layout、记录和控制操作只改变浏览器内存。场景菜单覆盖 idle/loading/running/saving/homing/error/offline/empty。静态服务器无设备依赖，POST 返回 405，不实例化录制器或相机。
 
 ## 文件和接口
 
+下表的网页 Python 文件在 `reproduction/portal/`，HTML / `pilot_ui/` 在
+`reproduction/portal/static/`，预览工具在 `reproduction/tools/`。
+完整目录说明见 [portal/README.md](../portal/README.md)。
+
 | 模块 | 责任 |
 | --- | --- |
-| `../start_capture.sh` / `../stop_capture.sh` | 一键启动与完整关闭入口 |
+| 根目录 `start_capture.sh` / `stop_capture.sh` | 一键启动与完整关闭入口 |
 | `capture_portal.py` | 环境入口、后台进程复用、实际就绪等待、Stop 保存后关闭 |
 | `start_capture_console.py` | 相机与网页生命周期、显式控制连接、固定启动流程与退出 |
 | `record_manual_pilot.py` | 真实录制、控制门控、状态与 HTTP 路由 |
@@ -192,7 +196,7 @@ HTTP 202 只表示请求接收，控制操作仍等待真实命令编号和状�
 ## 验证和实际边界
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 /home/zwqty/miniconda3/envs/hilserl/bin/python -m pytest reproduction/tests -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 python -m pytest reproduction/tests -q -p no:cacheprovider
 PILOT_SCREENSHOT_DIR=reproduction/logs/capture-ui-2026-09-21 \
   node --experimental-websocket reproduction/tests/check_pilot_layout.mjs
 ```
@@ -201,6 +205,6 @@ PILOT_SCREENSHOT_DIR=reproduction/logs/capture-ui-2026-09-21 \
 
 2026-09-22 的一次预检曾因 J4 超出当时模型配置下限 0.003130 rad 而拒绝连接；具体证据保存在本机 `reproduction/logs/portal-check-2026-09-22/`。这是历史失败记录，不表示当前仍受该问题阻塞。随后已完成真实采集并保存 MP4；当前是否能够连接、采集和 Home 必须读取实际设备状态。
 
-2026-09-29 整理时，`reproduction/tests` 与 `reproduction/autoserl/tests` 全量运行 305 项通过；包含模拟 HTTP/Unix socket 和 Chrome，不执行真实机器人动作。2026-09-24 将 `external` 切至第三台 ZED 2i（USB `3.4.1`），仍录制 `external`、`wrist` 两路。旧 episode 保留原视角；需用于新视角的 Layout 参考图应重新拍摄。
+2026-09-29 目录迁移后，`reproduction/tests` 与 `reproduction/autoserl/tests` 全量运行 307 项通过；包含模拟 HTTP/Unix socket 和 Chrome，不执行真实机器人动作。2026-09-24 将 `external` 切至第三台 ZED 2i（USB `3.4.1`），仍录制 `external`、`wrist` 两路。旧 episode 保留原视角；需用于新视角的 Layout 参考图应重新拍摄。
 
 尚未接入：网页 Jog、夹爪模式选择、Recover/Reset NUC/解锁锁定按钮、224×224 训练预处理预览、RTC 和 steering。AutoSERL 示范通过专用导出器转换为训练 transition；普通手动 episode 不能直接充当训练 replay。网页已有模型选择和冻结评估，但奖励标签、退出接触及复位仍需人工完成。

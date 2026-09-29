@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 import time
 
-RUNTIME=Path(__file__).resolve().parents[1]/'reproduction/runtime'
+RUNTIME=Path(__file__).resolve().parents[2]/'reproduction/runtime'
 
 
 def atomic_json(path,data):

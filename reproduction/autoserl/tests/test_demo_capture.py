@@ -14,7 +14,7 @@ from autoserl_capture import ActionJournal, DemoGuard, PROTOCOL
 from pilot_motion import PilotMotion
 from reproduction.autoserl.export_demo import export_demo, checked_trace, state_observation
 from reproduction.autoserl.collect_demo_trace import collect_trace
-from reproduction.pilot_dataset import Episode
+from reproduction.portal.pilot_dataset import Episode
 from reproduction.tests.test_pilot_dataset import snapshot
 
 
