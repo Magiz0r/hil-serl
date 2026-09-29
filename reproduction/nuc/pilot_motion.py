@@ -55,6 +55,9 @@ class PilotMotion:
         if self.mode != 'manual' or not command['connected'] or (new_command and command['action'] != 'start'):
             base.update(axes=[0.] * 6, enable=False)
         # Validate heartbeat, stop packet, sequence and input even while locked.
+        if hasattr(self.guard, 'capture_enabled'):
+            self.guard.capture_enabled = (self.mode == 'manual' and command['connected']
+                                         and not (new_command and command['action'] != 'start'))
         self.guard.step(base, now, dt)
         if not command['connected']:
             if self.mode != 'locked':

@@ -49,13 +49,15 @@ class GripperBridge:
     def _read(self):
         try:
             for line in self.process.stdout:
+                received = time.monotonic()
                 message = json.loads(line)
+                message['pc_received_at'] = received
                 message['preparation_supported'] = True
                 with self.lock:
                     if self.preparation and message.get('command_id') == self.preparation['command_id']:
                         message['preparation'] = dict(self.preparation)
                     self.message = message
-                    self.received = time.monotonic()
+                    self.received = received
                     if message['phase'] in ('stopped', 'container_stopped') and not (self.closed or self.stop):
                         self.error = message.get('error', 'gripper process stopped')
                 self.events.write(json.dumps(message) + '\n')

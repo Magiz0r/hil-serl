@@ -53,7 +53,7 @@ const PilotCatalogUI = (() => {
     if(document.activeElement!==byId('layout-select'))byId('layout-select').value=c.layout_id || '';
     const key=c.task_id+'|'+c.layout_id+'|'+c.prompt;
     if(key!==selection && !dirty){byId('prompt-input').value=c.prompt || '';selection=key;}
-    const locked=busy || !!s.recording || !!s.pending || !!awaiting || !!inflight || s.pilot?.mode==='homing';
+    const locked=busy || !!s.recording || !!s.pending || !!awaiting || !!inflight || ['homing','recovery_check','policy'].includes(s.pilot?.mode);
     for(const id of ['task-select','new-task','delete-task','layout-select','prompt-input'])byId(id).disabled=locked || !connected;
     byId('delete-task').disabled=locked || !c.task_id || !connected;
     for(const id of ['rename-layout','delete-layout'])byId(id).disabled=locked || !c.layout_id || !connected;

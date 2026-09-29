@@ -8,6 +8,8 @@
 | 连接预检 | `readonly_preflight.py`、`validate_hold_launch.py` | Desk、容器、源码摘要与 launch 配置检查 |
 | 主机与 ROS 入口 | `run_upward_trial.py`、`upward_trial.py`、`launch_hold.sh`、`fr3_hold.launch` | 主机容器管理、遥操作循环和控制器启动 |
 | 动作与门控 | `manual_guard.py`、`translation_guard.py`、`fr3_kinematics.py`、`pilot_motion.py` | 输入、状态、运动计算与 Start/Stop 门控 |
+| AutoSERL | `autoserl_capture.py`、`online_motion.py`、`recovery_check.py` | 固定夹爪示范动作日志、已确认策略动作、单次回退重放诊断 |
+| 状态传输 | `latest_jsonl.py` | 读取最新完整状态行；动作与按钮证据仍逐条保留 |
 | DROID / 自定义 Home | `official_home.py`、`custom_home.py` | 七关节目标、轨迹预检、插件切换、持久自定义目标 |
 | Home 插件 | `home_controller.cpp`、`home_profile.py`、`home_profile.h`、`home_profile.json` | ROS 关节位置轨迹跟踪和共用五次多项式参数 |
 | 旋转响应插件 | `rotation_controller.py`、`rotation_controller.cpp`、`rotation_controller.h` | 独立 Cartesian impedance 插件及运行时加载 |

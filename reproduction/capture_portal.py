@@ -82,11 +82,13 @@ def tailscale_available():
         return False
 
 
-def ensure_server(port):
+def ensure_server(port, autoserl_demo=False):
     service=existing_service()
     if service:
         if urlparse(service['local_url']).port!=port:
             raise RuntimeError('已有工作台运行在 '+service['local_url']+'；请使用该端口或先停止')
+        if bool(service.get('autoserl_demo', False)) != autoserl_demo:
+            raise RuntimeError('已有工作台的采集模式不同；请先结束采集并关闭工作台，再用所需模式启动')
         status(service)
         say('[WEB] 复用已运行的网页和相机。')
         return service
@@ -95,6 +97,7 @@ def ensure_server(port):
         if probe.connect_ex(('127.0.0.1',port))==0:
             raise RuntimeError('端口 %d 已被其他进程使用；未停止或接管该进程'%port)
     command=[sys.executable,'-u',str(SERVER),'--port',str(port)]
+    if autoserl_demo: command.append('--autoserl-demo')
     if tailscale_available(): command.append('--tailscale')
     else: say('[WEB] Tailscale 暂不可用，本次提供本机地址。')
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
@@ -163,7 +166,8 @@ def connect_control(service, timeout=120):
 def start(args):
     with (RUNTIME/'launcher.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        service=ensure_server(args.port)
+        service=(ensure_server(args.port, autoserl_demo=True) if getattr(args,'autoserl_demo',False)
+                 else ensure_server(args.port))
     show_urls(service)
     if not args.no_open: open_browser(service)
     if args.web_only:
@@ -177,7 +181,7 @@ def start(args):
 
 
 def finish_before_stop(service, current):
-    moving=current.get('pilot',{}).get('mode') in ('manual','waiting_for_center','homing')
+    moving=current.get('pilot',{}).get('mode') in ('manual','waiting_for_center','homing','recovery_check','policy')
     if not (current.get('recording') or current.get('pending') or moving): return
     was_recording=current.get('recording',False)
     say('[STOP] 先 Finish，等待保持和记录落盘…')
@@ -227,6 +231,7 @@ def main():
     begin.add_argument('--port',type=int,default=8765)
     begin.add_argument('--web-only',action='store_true',help='start/reuse the web page without connecting control')
     begin.add_argument('--no-open',action='store_true',help='print URLs without opening a desktop browser')
+    begin.add_argument('--autoserl-demo',action='store_true',help='use AutoSERL demonstration recording profile')
     sub.add_parser('stop',help='Finish active capture, then stop the owned portal')
     args=parser.parse_args()
     if args.action=='start' and not 1<=args.port<=65535: parser.error('invalid port')

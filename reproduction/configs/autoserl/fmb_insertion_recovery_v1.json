@@ -1,0 +1,99 @@
+{
+  "schema": "autoserl_recovery_selection_v1",
+  "status": "selected_not_enabled",
+  "physical_recovery_validated": false,
+  "demo_path": "reproduction/data/autoserl/fmb_insertion/demo_20260925T224606_b3ce8e10.pkl",
+  "demo_pickle_sha256": "a7e601992ec41000c04fa4e51be60e4e80f3cbc6f74c0b0b911c7e9d09e03ff3",
+  "demo_manifest_sha256": "757109203fb24ef94fb8ebd6b966294a66ff2eb78a53a2174ec0ae59a043924c",
+  "demo_initial_tcp_pose": [
+    0.43326544761657715,
+    -0.02631250023841858,
+    0.34870222210884094,
+    -3.1220408104360713,
+    0.007207517411055964,
+    -0.019306277125068716
+  ],
+  "index_convention": "zero-based exported transition observation index",
+  "recover_point0": 60,
+  "recover_point1": 90,
+  "window_length": 31,
+  "points": [
+    {
+      "index": 60,
+      "seconds_from_record_start": 6.724363724992145,
+      "seconds_from_first_action": 6.654817275004461,
+      "tcp_xyz": [
+        0.47989046573638916,
+        -0.038093458861112595,
+        0.3031412661075592
+      ],
+      "tcp_euler_xyz": [
+        -3.132548853453302,
+        0.04766106643492307,
+        -0.0838249998516809
+      ],
+      "force_norm_N": 2.964147705003529
+    },
+    {
+      "index": 90,
+      "seconds_from_record_start": 10.065382371016312,
+      "seconds_from_first_action": 9.995835921028629,
+      "tcp_xyz": [
+        0.48046544194221497,
+        -0.045966845005750656,
+        0.27878645062446594
+      ],
+      "tcp_euler_xyz": [
+        -3.139667133892613,
+        0.07443321625002652,
+        -0.1349686487403603
+      ],
+      "force_norm_N": 1.8922778739818018
+    }
+  ],
+  "selection_source": "Operator identified initial hole entry at 9.8–10.1 s in the new demonstration; point0 chosen from visible free-space approach at 6.72 s.",
+  "point1_operator_time_window_seconds": [
+    9.8,
+    10.1
+  ],
+  "point1_to_point0_tcp_delta_mm": [
+    -0.5749762058258057,
+    7.8733861446380615,
+    24.35481548309326
+  ],
+  "scope": "Approach to initial hole entry; subsequent deep insertion remains outside recovery interval.",
+  "control_parameters": {
+    "th1": 0.005,
+    "th2": 0.02,
+    "l_stag": 20,
+    "l_term": 10
+  },
+  "layout": {
+    "id": "layout_9e76cf1d66c6",
+    "task_id": "task_895741dfcc8a",
+    "name": "Insert layout2",
+    "domain": "real",
+    "ood": false,
+    "created_unix": 1790376363.6693122
+  },
+  "control_compliance": {
+    "translational_stiffness": 3000.0,
+    "translational_damping": 89.0,
+    "rotational_stiffness": 150.0,
+    "rotational_damping": 7.0,
+    "translational_Ki": 0.0,
+    "rotational_Ki": 0.0,
+    "translational_clip_x": 0.0075,
+    "translational_clip_y": 0.0016,
+    "translational_clip_z": 0.0055,
+    "translational_clip_neg_x": 0.003,
+    "translational_clip_neg_y": 0.0016,
+    "translational_clip_neg_z": 0.005,
+    "rotational_clip_x": 0.01,
+    "rotational_clip_y": 0.025,
+    "rotational_clip_z": 0.02,
+    "rotational_clip_neg_x": 0.01,
+    "rotational_clip_neg_y": 0.025,
+    "rotational_clip_neg_z": 0.02
+  }
+}

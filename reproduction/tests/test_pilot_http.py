@@ -16,6 +16,30 @@ from preview_pilot import PreviewHandler
 
 
 class PilotHTTPTests(unittest.TestCase):
+    def test_model_catalog_is_read_only_and_preparation_rejects_cross_origin(self):
+        recorder=Mock()
+        recorder.experiments.catalog.return_value={'runs':[]}
+        recorder.experiments.metrics.return_value={'summary':{'episodes':50}}
+        recorder.experiment_request.return_value={'phase':'loading'}
+        server=ThreadingHTTPServer(('127.0.0.1',0),handler_for(recorder))
+        thread=threading.Thread(target=server.serve_forever,kwargs={'poll_interval':.01});thread.start()
+        host='127.0.0.1:%d'%server.server_port
+        def request(method,path,origin=None):
+            conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
+            conn.request(method,path,json.dumps({'action':'prepare','mode':'fresh','model_id':None,'episodes':5}) if method=='POST' else None,
+                {'Host':host,'Origin':origin or 'http://'+host,'Content-Type':'application/json'})
+            response=conn.getresponse();code=response.status;response.read();conn.close();return code
+        try:
+            self.assertEqual(request('GET','/models'),200)
+            self.assertEqual(request('GET','/training-data?run=known'),200)
+            recorder.experiment_request.assert_not_called();recorder.command.assert_not_called()
+            self.assertEqual(request('POST','/experiments','http://external.example'),400)
+            recorder.experiment_request.assert_not_called()
+            self.assertEqual(request('POST','/experiments'),200)
+            recorder.experiment_request.assert_called_once_with(dict(action='prepare',mode='fresh',model_id=None,episodes=5))
+        finally:
+            server.shutdown();server.server_close();thread.join(timeout=2)
+
     def test_only_local_same_origin_commands_reach_recorder(self):
         recorder=Mock()
         server=ThreadingHTTPServer(('127.0.0.1',0),handler_for(recorder))

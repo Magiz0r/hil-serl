@@ -41,6 +41,7 @@ def sample_from_message(message, received_at):
         "q_d": vector(message, "q_d", 7) if hasattr(message, "q_d") else None,
         "dq": vector(message, "dq", 7),
         "tau": vector(message, "tau_J", 7),
+        "K_F_ext_hat_K": vector(message, "K_F_ext_hat_K", 6) if hasattr(message, "K_F_ext_hat_K") else None,
         "success": success,
         "mode": int(message.robot_mode),
         "current_errors": active_errors(message.current_errors),

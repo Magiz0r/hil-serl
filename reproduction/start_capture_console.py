@@ -25,6 +25,8 @@ from pilot_dataset import CAMERAS
 from pilot_records import EpisodeLibrary, replace_json
 from pilot_video import VideoExporter
 from record_manual_pilot import ROOT, Camera, Recorder, handler_for
+from pilot_training import session_status, session_command, training_settings, save_training_settings
+from pilot_experiments import ExperimentStore, ExperimentManager
 
 SSH = ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
        '-o', 'StrictHostKeyChecking=yes', 'FrankaNUC']
@@ -60,8 +62,11 @@ class MissingCamera:
 
 
 class CaptureRuntime:
-    def __init__(self, settings, task, runtime):
+    def __init__(self, settings, task, runtime, autoserl_demo=False):
         self.settings, self.initial_task, self.runtime = settings, task, runtime
+        self.autoserl_demo = bool(autoserl_demo)
+        self.experiments=ExperimentStore(ROOT)
+        self.experiment_manager=ExperimentManager(self.experiments)
         self.catalog = CaptureCatalog(ROOT/'reproduction/data/capture_catalog', task)
         self.video_exporter=VideoExporter()
         self.library = EpisodeLibrary([ROOT/'reproduction/data/manual_capture', ROOT/'reproduction/data/block_into_cup'],self.video_exporter)
@@ -101,6 +106,7 @@ class CaptureRuntime:
                 except ValueError: status.update(task=None,prompt='',layout=None)
             status['camera_errors'] = {name: camera.error for name, camera in self.cameras.items()}
             status['runtime'] = dict(phase=self.phase, error=self.error,
+                autoserl_demo=self.autoserl_demo,
                 can_connect=self.phase in ('disconnected','error') and not self.recorder and not self.control and not (self.worker and self.worker.is_alive()),
                 can_disconnect=self.phase=='connecting' or (self.phase in ('connected','error') and not (self.worker and self.worker.is_alive())),
                 home_source='droid_default', home_joint_degrees=[0,-36,0,-144,0,108,0])
@@ -109,13 +115,42 @@ class CaptureRuntime:
             if revision!=getattr(self,'record_revision',None):
                 self.library.refresh(force=True);self.record_revision=revision
             status['episodes'] = self.library.list()
+            status['training']=session_status()
+            status['training_settings']=training_settings()
+            status['experiment']=self.experiment_manager.status() if self.autoserl_demo else None
             return status
+
+    def experiment_request(self,data):
+        if not self.autoserl_demo:raise ValueError('请使用 AutoSERL 网页模式')
+        with self.lock:
+            if data=={'action':'stop'}:return self.experiment_manager.stop()
+            if self.recorder:
+                status=self.recorder.get_status()
+                if status.get('recording') or status.get('pending') or status.get('pilot',{}).get('mode')!='locked':
+                    raise ValueError('请先停止采集或动作，再准备模型')
+            return self.experiment_manager.prepare(data)
 
     def command(self, command):
         with self.lock:
             if not self.recorder or self.phase!='connected':
                 raise ValueError('控制会话尚未连接，请先连接控制')
             self.recorder.command(command)
+
+    def online_request(self, data):
+        with self.lock:
+            recorder=self.recorder
+            if recorder is None or self.phase!='connected':
+                raise ValueError('控制会话尚未连接')
+        return recorder.online_api.request(data)
+
+    def training_request(self, data):
+        with self.lock:
+            recorder=self.recorder
+        if recorder is not None:return recorder.training_request(data)
+        return session_command(data)
+
+    def training_settings_request(self,data):
+        return save_training_settings(data)
 
     def catalog_action(self, data):
         with self.lock:
@@ -168,6 +203,10 @@ class CaptureRuntime:
                 '--execute-attended-manual','--no-trial-bounds','--official-input','--with-gripper',
                 '--speed-scale','2','--translation-scale','1.6','--rotation-scale','3',
                 '--rotation-response','responsive','--gripper-speed','192','--pilot-gate','--official-home']
+            if self.autoserl_demo:
+                command=[sys.executable,'-u',str(ROOT/'reproduction/spacemouse_upward_trial.py'),
+                    '--execute-attended-manual','--no-trial-bounds','--official-input','--with-gripper',
+                    '--autoserl-demo','--gripper-speed','192','--pilot-gate','--official-home']
             with self.lock:
                 if self.done.is_set() or self.connect_cancel.is_set():self.disconnect();return
                 self.control=subprocess.Popen(command,stdout=output,stderr=subprocess.STDOUT,
@@ -228,12 +267,14 @@ class CaptureRuntime:
 
     def close(self):
         self.done.set()
+        training_stopped=self.experiment_manager.close()
         if self.worker and self.worker.is_alive():self.worker.join(timeout=45)
         self.disconnect()
         for camera in self.cameras.values():camera.close()
         self.video_exporter.close()
         stopped=self.control is None or self.control.poll() is not None
-        return dict(control_stopped=stopped, error=None if stopped else self.error)
+        return dict(control_stopped=stopped, training_stopped=training_stopped,
+            error=None if stopped and training_stopped else self.error or '训练任务尚未退出')
 
 
 def main():
@@ -241,6 +282,7 @@ def main():
     parser.add_argument('--port',type=int,default=8765)
     parser.add_argument('--tailscale',action='store_true')
     parser.add_argument('--connect',action='store_true',help='explicitly attempt attended controller startup')
+    parser.add_argument('--autoserl-demo',action='store_true',help='opt-in AutoSERL action journal and reference compliance')
     args=parser.parse_args()
     os.umask(0o077)
     directory=ROOT/'reproduction/runtime/capture-console';directory.mkdir(parents=True,exist_ok=True)
@@ -248,7 +290,7 @@ def main():
     fcntl.flock(claim,fcntl.LOCK_EX|fcntl.LOCK_NB)
     settings=json.loads((ROOT/'reproduction/configs/cameras.json').read_text())
     task=json.loads((ROOT/'reproduction/configs/tasks/block_into_cup.json').read_text())
-    runtime=CaptureRuntime(settings,task,directory)
+    runtime=CaptureRuntime(settings,task,directory,autoserl_demo=args.autoserl_demo)
     servers=[]
     def stop(*_):raise KeyboardInterrupt()
     for sig in (signal.SIGINT,signal.SIGTERM):signal.signal(sig,stop)
@@ -261,7 +303,8 @@ def main():
             remote=ThreadingHTTPServer((address,args.port),handler_for(runtime));servers.append(remote)
             threading.Thread(target=remote.serve_forever,daemon=True).start()
             tailscale_url='http://%s:%s/'%(address,args.port)
-        startup=dict(local_url='http://127.0.0.1:%s/'%args.port,tailscale_url=tailscale_url,pid=os.getpid(),automatic_motion=False)
+        startup=dict(local_url='http://127.0.0.1:%s/'%args.port,tailscale_url=tailscale_url,pid=os.getpid(),automatic_motion=False,
+                     autoserl_demo=args.autoserl_demo)
         (directory/'service.json').write_text(json.dumps(startup,indent=2))
         print(json.dumps(startup),flush=True)
         if args.connect:runtime.runtime_action({'action':'connect'})

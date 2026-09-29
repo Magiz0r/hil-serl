@@ -3,6 +3,8 @@ const byId=id=>document.getElementById(id);
 let current=null, connected=false, refreshing=false, lastReceived=0;
 let awaiting=null, inflight=null, requestSequence=0, localError='', lastStateKey='', lastError='', episodeSignature='';
 let homeToSet='set_home';
+let lastHealthFault=0,lastHealthRecovery=0;
+const recoveryLabels={idle:'尚未运行',approach:'重放示范接近孔口',verify_approach:'检查接近终点',retreat_reference:'回退对齐与停稳',replay_reference:'动作重放',verify_reference:'检查重放终点',passed:'轨迹检查通过 · 请确认是否实际入孔',failed:'验证中止',stopped:'已停止'};
 const outcomeLabels={success:'成功',failure:'失败',discard:'作废',incomplete:'不完整',unlabeled:'待标注'};
 const outcomeColors={success:'good',failure:'bad',discard:'muted',incomplete:'warn',unlabeled:'muted'};
 const taskLabel=name=>typeof name==='string' && name.trim()?name:'未记录任务';
@@ -30,6 +32,13 @@ function service(name,label,color,detail) {
   element.querySelector('b').textContent=label;
   element.title=detail || label;
 }
+function feedbackReason(reason,telemetry) {
+  const match=/^(arm|control|gripper): stale stream$/.exec(reason || '');
+  if(!match)return reason;
+  const name=match[1],age=telemetry?.[name]?.age;
+  return ({arm:'机械臂状态',control:'控制状态',gripper:'夹爪状态'}[name])+'反馈超时'+
+    (Number.isFinite(age)?`（${Math.round(age*1000)} ms，阈值 ${name==='gripper'?700:500} ms）`:'')+' · 已请求停止';
+}
 function modeFor(s) {
   if(!connected) return ['offline','连接中断','warn','页面连接中断，状态已过期。控制状态未知；可用 SpaceMouse 双键退出控制。'];
   if(s.fatal) return ['error','已停止','bad','录制器异常退出。请重启专用采集会话。'];
@@ -38,9 +47,11 @@ function modeFor(s) {
   if(s.runtime?.phase==='disconnecting') return ['disconnecting','断开控制中','warn','正在结束本网页的控制会话，等待进程退出。'];
   if(s.runtime?.phase==='error') return ['error','连接异常','bad',s.runtime.error || s.reason || '控制会话异常'];
   if(s.pending?.action==='lock' || awaiting?.action==='lock') return ['saving',s.recording?'正在保存':'正在停止','warn',s.recording?'正在停用输入，等待机械臂与夹爪确认后保存…':'正在停用输入，等待控制器保持当前位置…'];
+  if(!s.ready) return ['loading','暂不可采集','warn',feedbackReason(s.reason,s.telemetry) || '正在等待设备数据…'];
   if(s.pilot?.mode==='homing') {const name=s.pilot.active_home==='custom'?'自定义 Home':'DROID Home';return ['homing','返回 '+name,'info',(s.pilot.joint_phase==='checking'?'正在检查返回路径：':'正在返回 ')+name+' · SpaceMouse 已停用，可按 Stop 中断。'];}
   if(s.pilot?.custom_home?.saving) return ['pending','保存自定义 Home','info','正在保存关节目标并准备自定义返回控制器…'];
-  if(!s.ready) return ['loading','暂不可采集','warn',s.reason || '正在等待设备数据…'];
+  if(s.pilot?.mode==='recovery_check') return ['recovery','回退 / 重放验证','info',(recoveryLabels[s.pilot.recovery_check?.phase] || '验证中')+' · Stop 或拨动 SpaceMouse 可中止。'];
+  if(s.pilot?.mode==='policy') return ['policy','AutoSERL 在线回合','info','策略与自动干预控制中 · 左键成功，右键失败；Stop 或拨动旋钮中止。'];
   if(s.recording) return ['running','采集中','good',s.pilot?.mode==='waiting_for_center'?'正在采集 · 请松开 SpaceMouse 旋钮回中。':'正在采集 · SpaceMouse 可操作，完成后点击 Success、Fail 或 Stop。'];
   if((s.pending?.action || awaiting?.action || inflight?.action || '').startsWith('gripper_')) return ['preparing','夹爪准备中','info','正在操作夹爪 · 不录制，机械臂保持当前位置。可按 Stop 中断。'];
   if(awaiting || s.pending) return ['pending','等待确认','info','请求已发送，正在等待控制器确认…'];
@@ -48,6 +59,9 @@ function modeFor(s) {
 }
 function renderControls() {
   const s=current || {}, p=s.pilot || {};
+  const fixedGripper=!!s.runtime?.autoserl_demo;
+  write('capture-mode',fixedGripper?'AutoSERL 示范':'人工遥操作');
+  write('guide-mode-detail',fixedGripper?'先夹好插块再 Start；采集中夹爪固定，插入成功后点击 Success 保存。':'Start 后松开旋钮回中；左键闭合夹爪，右键张开。');
   const busy=!!awaiting || !!inflight || !!s.pending || !!p.custom_home?.saving;
   const canAct=connected && s.ready && !s.fatal && !s.recording && p.mode==='locked' && !busy;
   byId('start').disabled=!canAct || PilotCatalogUI.blocksStart();
@@ -56,9 +70,34 @@ function renderControls() {
   byId('set_home').disabled=!canAct || p.home_kind==='official_joint';
   byId('set-custom-home').disabled=!canAct || !p.custom_home;
   byId('custom-home').disabled=!(canAct && p.custom_home?.available);
+  byId('recovery-panel').hidden=!fixedGripper || !p.recovery_check?.available;
+  const actorPresent=!!s.training?.available || !!s.experiment?.active;
+  byId('recovery-check').disabled=!(canAct && p.recovery_check?.available) || actorPresent;
+  byId('recovery-check').title=actorPresent?'请先结束已准备的训练或评估任务，再单独校验示范':'';
+  byId('online-panel').hidden=!(p.online?.available || s.training?.available);
+  byId('online-start').disabled=!(canAct && p.online?.available && p.custom_home?.joint_error_rad<.01);
+  const training=s.training || {},continuous=!!training.available,completedEvaluation=training.mode==='evaluation' && training.phase==='completed';
+  byId('continuous-controls').hidden=!(continuous || completedEvaluation);
+  byId('online-start').hidden=continuous || completedEvaluation;
+  if(continuous){
+    const labelled={success:'成功',failure:'失败'}[training.label] || '待标记';
+    write('continuous-status',`第 ${training.episode+1} 轮 · ${training.message || ''} · ${labelled}`+(training.phase==='countdown'?` · ${Math.ceil(training.countdown_seconds)} 秒`:''));
+    write('online-toggle',training.enabled?'暂停循环':'继续 / 开始运行');
+  }
+  if(completedEvaluation){write('continuous-status',training.message);write('online-toggle','评估已完成');}
+  byId('online-toggle').disabled=!continuous || completedEvaluation;
+  for(const id of ['online-success','online-failure'])byId(id).disabled=!(continuous && training.can_label);
+  write('online-status',p.online?('已执行 '+Math.max(0,p.online.completed_index+1)+' 步 · '+({idle:'等待训练程序',active:'在线采样中',ended:'回合结束'}[p.online.phase] || p.online.phase)+(p.online.reason?' · '+p.online.reason:'')):'等待配置');
+  if(continuous)byId('online-status').textContent+=` · 本轮 Return ${training.episode_return ?? '—'}`;
+  write('recovery-status',p.recovery_check?(recoveryLabels[p.recovery_check.phase] || p.recovery_check.phase)+(p.recovery_check.error?' · '+p.recovery_check.error:''):'等待配置');
+  const recovery=p.recovery_check,retreat=recovery?.retreat_progress,requirements=recovery?.retreat_requirements;
+  write('recovery-rule',requirements?`回退要求：位置误差 < ${requirements.position_tolerance_m*1000} mm，并停稳 ${requirements.settle_seconds} 秒。`:'');
+  if(recovery?.phase==='retreat_reference' && retreat){
+    byId('recovery-status').textContent+=` · 位置误差 ${(retreat.errors[0]*1000).toFixed(2)} mm · 速度 ${(retreat.linear_speed_m_s*1000).toFixed(1)} mm/s · 停稳 ${retreat.stable_seconds.toFixed(2)} 秒`;
+  }
   for(const id of ['gripper-open','gripper-close']) byId(id).disabled=!canAct || !s.telemetry?.gripper?.ok || !s.telemetry?.gripper?.preparation_supported;
   const gripperBusy=(s.pending?.action || awaiting?.action || inflight?.action || '').startsWith('gripper_');
-  const gripperText=!connected || s.fatal?'夹爪反馈已过期':s.last_command_error? s.last_command_error:s.recording?'采集中请使用 SpaceMouse 左 / 右键':!s.ready?'连接控制并等待设备就绪':!s.telemetry?.gripper?.preparation_supported?'请断开并重新连接控制，启用夹爪按钮':p.mode==='homing'?'等待 Home 完成':gripperBusy?'动作中，等待到位或接触反馈…':s.telemetry?.gripper?.detail || '等待夹爪反馈';
+  const gripperText=!connected || s.fatal?'夹爪反馈已过期':s.last_command_error? s.last_command_error:s.recording?(fixedGripper?'AutoSERL 采集中：夹爪保持，开合按钮停用':'采集中请使用 SpaceMouse 左 / 右键'):!s.ready?'连接控制并等待设备就绪':!s.telemetry?.gripper?.preparation_supported?'请断开并重新连接控制，启用夹爪按钮':p.mode==='homing'?'等待 Home 完成':gripperBusy?'动作中，等待到位或接触反馈…':s.telemetry?.gripper?.detail || '等待夹爪反馈';
   write('gripper-status',gripperText+(connected && s.telemetry?.gripper?.ok && Number.isFinite(s.telemetry.gripper_position)?' · '+s.telemetry.gripper_position+'/255':''));
   // Stop can preempt an in-flight Start/Home, and remains reachable after a network failure.
   const finishBusy=inflight?.action==='lock' || awaiting?.action==='lock';
@@ -71,7 +110,7 @@ function renderControls() {
   byId('start').title=canAct?'开始记录，然后启用 SpaceMouse':p.mode==='homing'?'Home 期间不能开始采集':'等待设备就绪、保持当前位置且前一个操作完成';
   byId('home').title=p.home_set?'回零不会自动开合夹爪；请先确认返回路径畅通':'尚未设置 Home';
   for(const [id,active,done] of [['phase-ready',mode[0]==='idle',mode[0]==='running'||mode[0]==='saving'],['phase-record',mode[0]==='running',mode[0]==='saving'],['phase-save',mode[0]==='saving',false]]) byId(id).className=active?'active':done?'done':'';
-  const canMark=connected && s.recording && !s.fatal && !busy;
+  const canMark=connected && !s.fatal && !busy && (s.recording || (continuous && training.can_label));
   for(const id of ['finish-success','finish-failure','mobile-success','mobile-failure']) byId(id).disabled=!canMark;
   PilotCatalogUI.render(s);
   return mode;
@@ -158,6 +197,7 @@ function showEpisode(episode) {
   byId('episode-dialog').showModal();
 }
 function render() {
+  PilotTrainingUI.render(current || {},connected);
   const s=current || {}, mode=renderControls();
   const task=s.task?.name;
   write('task-name',task || '等待任务配置');
@@ -180,9 +220,17 @@ function render() {
   }
   const ordinaryWait=['disconnected','connecting','disconnecting'].includes(s.runtime?.phase);
   const cameraError=Object.entries(s.camera_errors || {}).filter(([,error])=>error).map(([name,error])=>name+': '+error).join('；');
-  const error=localError || s.last_command_error || s.pilot?.error || s.pilot?.custom_home?.error || s.runtime?.error || cameraError || (s.ready===false && !ordinaryWait?s.reason:'');
+  const error=localError || s.last_command_error || s.pilot?.error || s.pilot?.custom_home?.error || s.runtime?.error || cameraError || (s.ready===false && !ordinaryWait?feedbackReason(s.reason,s.telemetry):'');
   byId('error-banner').hidden=!error;write('error',error);
   if(error && error!==lastError) log(error,'bad');lastError=error;
+  const fault=s.health?.last_fault;
+  if(fault && fault.time_unix!==lastHealthFault){
+    const telemetry=Object.fromEntries(Object.entries(fault.ages || {}).map(([name,age])=>[name,{age}]));
+    log('已保存反馈异常：'+feedbackReason(fault.reason,telemetry),'bad');lastHealthFault=fault.time_unix;
+  }
+  if(s.health?.recovered_unix && s.health.recovered_unix!==lastHealthRecovery){
+    log('反馈已恢复；此前超时记录已保留','info');lastHealthRecovery=s.health.recovered_unix;
+  }
   const stateKey=[mode[0],s.pilot?.mode,s.current_episode,s.episodes?.length].join('|');
   if(stateKey!==lastStateKey && current) {log(mode[3],mode[2]);lastStateKey=stateKey;}
   badge('connection',PilotAPI.isDemo?'DEMO':connected?'网页在线':'网页断线',PilotAPI.isDemo?'warn':connected?'good':'warn');
@@ -200,7 +248,7 @@ function reconcile(s) {
   if(completed) {
     awaiting=null;
     const saved=s.last_saved_episode || s.episodes?.find(e=>(e.storage_name || e.name)===pending.episodeName) || s.episodes?.at(-1);
-    const message=isGripper?(s.gripper_preparation.contact?'夹爪已接触物体，请确认夹持状态':'夹爪已到目标位置')+' · 未录制，准备好后再 Start':pending.action==='lock'?(pending.wasRecording?'记录已保存 · '+(outcomeLabels[saved?.outcome] || '等待记录'):'已停用输入 · 保持当前位置'):pending.action==='start'?'采集已开始 · 请先松开旋钮回中':pending.action==='home'?'控制器已接收 DROID Home，等待回位反馈':pending.action==='custom_home'?'控制器已接收自定义 Home，等待回位反馈':pending.action==='set_custom_home'?'自定义 Home 已保存':'Home 目标已更新';
+    const message=isGripper?(s.gripper_preparation.contact?'夹爪已接触物体，请确认夹持状态':'夹爪已到目标位置')+' · 未录制，准备好后再 Start':pending.action==='lock'?(pending.wasRecording?'记录已保存 · '+(outcomeLabels[saved?.outcome] || '等待记录'):'已停用输入 · 保持当前位置'):pending.action==='start'?'采集已开始 · 请先松开旋钮回中':pending.action==='home'?'控制器已接收 DROID Home，等待回位反馈':pending.action==='custom_home'?'控制器已接收自定义 Home，等待回位反馈':pending.action==='set_custom_home'?'自定义 Home 已保存':pending.action==='recovery_check'?'验证已开始 · 可随时 Stop':'Home 目标已更新';
     feedback(message,'good');log(message,'good');
   } else if(performance.now()-pending.at>(pending.action==='set_custom_home' || isGripper?12000:6500)) {
     awaiting=null;localError='控制器未在预期时间内确认操作。请检查当前状态；可按 Stop 停用输入。';feedback('操作完成状态未确认','warn');
@@ -232,6 +280,9 @@ async function refresh() {
   } finally {refreshing=false;}
 }
 async function sendPilotCommand(command) {
+  if(!current?.recording && current?.training?.available && ['finish_success','finish_failure'].includes(command)){
+    return sendTraining(command==='finish_success'?'success':'failure');
+  }
   const action=command.startsWith('finish')?'lock':command;
   if(action==='lock') {if(inflight?.action==='lock' || awaiting?.action==='lock') return;
     if(command!=='finish' && (!connected || !current?.recording || current.pending || awaiting || inflight))return;}
@@ -243,7 +294,7 @@ async function sendPilotCommand(command) {
   if(['set_custom_home','custom_home'].includes(action) && !current.pilot.custom_home)return;
   if(action==='custom_home' && !current.pilot.custom_home.available)return;
   const id=++requestSequence;
-  const label={start:'Start',lock:command==='finish_success'?'Success':command==='finish_failure'?'Fail':'Stop',home:'DROID Home',set_home:'设置 Home',custom_home:'返回自定义 Home',set_custom_home:'保存自定义 Home',gripper_open:'打开夹爪',gripper_close:'闭合夹爪'}[action];
+  const label={start:'Start',lock:command==='finish_success'?'Success':command==='finish_failure'?'Fail':'Stop',home:'DROID Home',set_home:'设置 Home',custom_home:'返回自定义 Home',set_custom_home:'保存自定义 Home',recovery_check:'回退 / 重放验证',policy_start:'在线训练回合',gripper_open:'打开夹爪',gripper_close:'闭合夹爪'}[action];
   inflight={id,action};awaiting=null;localError='';
   const pending={episodeName:current?.current_episode,action,at:performance.now(),beforeId:current?.pilot?.command_id ?? -1,wasRecording:!!current?.recording,previousError:current?.last_command_error};
   feedback(label+' 请求发送中…');log(label+'：发送请求');render();
@@ -265,6 +316,17 @@ function finish() {
   if(current?.runtime?.phase==='disconnecting'){feedback('控制会话正在断开');return;}
   sendPilotCommand('finish');
 }
+async function sendTraining(action){
+  const t=current?.training;if(!t?.available)return;
+  try{
+    await PilotAPI.training({action,session_id:t.session_id,episode:t.episode});
+    feedback({success:'本轮成功已标记',failure:'本轮失败已标记',pause:'循环已暂停',resume:'循环继续，等待 Home 到位'}[action]);
+  }catch(error){feedback(error.message,'bad');}
+  refresh();
+}
+byId('online-success').addEventListener('click',()=>sendTraining('success'));
+byId('online-failure').addEventListener('click',()=>sendTraining('failure'));
+byId('online-toggle').addEventListener('click',()=>sendTraining(current?.training?.enabled?'pause':'resume'));
 byId('start').addEventListener('click',()=>sendPilotCommand('start'));
 byId('mobile-start').addEventListener('click',()=>sendPilotCommand('start'));
 for(const id of ['finish','top-finish','mobile-finish']) byId(id).addEventListener('click',finish);
@@ -273,6 +335,8 @@ byId('gripper-open').addEventListener('click',()=>sendPilotCommand('gripper_open
 byId('gripper-close').addEventListener('click',()=>sendPilotCommand('gripper_close'));
 byId('set_home').addEventListener('click',()=>{homeToSet='set_home';write('confirm-home-title','覆盖本次会话的 Home？');write('confirm-home-message','将当前实测位姿保存为本次会话的 Home。设置本身不会移动机械臂。');byId('confirm-home').showModal();});
 byId('custom-home').addEventListener('click',()=>sendPilotCommand('custom_home'));
+byId('recovery-check').addEventListener('click',()=>sendPilotCommand('recovery_check'));
+byId('online-start').addEventListener('click',()=>sendPilotCommand('policy_start'));
 byId('set-custom-home').addEventListener('click',()=>{
   if(!current?.pilot?.custom_home?.q){sendPilotCommand('set_custom_home');return;}
   homeToSet='set_custom_home';write('confirm-home-title','覆盖自定义 Home？');write('confirm-home-message','将当前七个实测关节角保存为新的自定义 Home，覆盖此前保存的自定义目标。DROID Home 保持固定。设置本身不会移动机械臂。');byId('confirm-home').showModal();
@@ -325,6 +389,7 @@ setInterval(()=>{
 },500);
 PilotCatalogUI.init();
 PilotRecordsUI.init();
+PilotTrainingUI.init();
 PilotCameras.start();
 setInterval(refresh,500);
 refresh();

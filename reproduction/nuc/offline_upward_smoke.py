@@ -12,6 +12,7 @@ ROOT = Path(__file__).parent
 MANUAL = '--manual' in sys.argv
 FREE = '--no-trial-bounds' in sys.argv
 OFFICIAL = '--official-input' in sys.argv
+AUTOSERL = '--autoserl-demo' in sys.argv
 PILOT = '--pilot-gate' in sys.argv
 OFFICIAL_HOME = '--official-home' in sys.argv
 INTERRUPT_HOME = '--interrupt-home' in sys.argv
@@ -22,6 +23,8 @@ ROTATION_SCALE = float(sys.argv[sys.argv.index('--rotation-scale') + 1]) if '--r
 ROTATION_RESPONSE = sys.argv[sys.argv.index('--rotation-response') + 1] if '--rotation-response' in sys.argv else 'standard'
 MODE_FLAGS = (['--manual'] if MANUAL else []) + (['--no-trial-bounds'] if FREE else []) + (['--official-input'] if OFFICIAL else []) + ['--speed-scale', str(SPEED_SCALE)]
 MODE_FLAGS += ['--rotation-response', ROTATION_RESPONSE]
+if AUTOSERL:
+    MODE_FLAGS += ['--autoserl-demo']
 if PILOT:
     MODE_FLAGS += ['--pilot-gate']
 if OFFICIAL_HOME:
@@ -141,6 +144,8 @@ def synthetic_robot():
             message.header.stamp = rospy.Time.now()
             message.q = q.tolist()
             message.q_d = q.tolist()
+            if AUTOSERL:
+                message.K_F_ext_hat_K = [1., 2., 3., .1, .2, .3]
             message.O_T_EE = transform.flatten(order='F').tolist()
             message.control_command_success_rate = 1.0
             message.robot_mode = FrankaState.ROBOT_MODE_MOVE
@@ -173,6 +178,8 @@ def synthetic_trial():
     sys.argv = [str(ROOT / 'upward_trial.py'), '--execute-attended-manual' if MANUAL else '--execute-attended-upward-trial'] + (['--no-trial-bounds'] if FREE else []) + (['--official-input'] if OFFICIAL else [])
     sys.argv += ['--speed-scale', str(SPEED_SCALE)]
     sys.argv += ['--rotation-response', ROTATION_RESPONSE]
+    if AUTOSERL:
+        sys.argv += ['--autoserl-demo']
     if TRANSLATION_SCALE is not None:
         sys.argv += ['--translation-scale', str(TRANSLATION_SCALE)]
     if ROTATION_SCALE is not None:
@@ -282,12 +289,26 @@ def check_scenario(disconnect):
                 assert compliance['rotational_stiffness'] == (300 if ROTATION_RESPONSE in ('fast','responsive') else 150), result
                 assert compliance['rotational_damping'] == (10 if ROTATION_RESPONSE in ('fast','responsive') else 7), result
                 assert result['rotation_filter_coefficient'] == (.02 if ROTATION_RESPONSE=='responsive' else .005), result
-                assert compliance['translational_stiffness'] == 2000, result
+                assert compliance['translational_stiffness'] == (3000 if AUTOSERL else 2000), result
                 assert compliance['translational_damping'] == 89, result
-                for axis in ('x', 'y', 'z'):
-                    for sign in ('', 'neg_'):
-                        assert compliance['rotational_clip_' + sign + axis] == .03, result
-                        assert compliance['translational_clip_' + sign + axis] == .005, result
+                if AUTOSERL:
+                    from autoserl_capture import PROTOCOL, COMPLIANCE
+                    assert result['demo_protocol'] == PROTOCOL
+                    assert all(compliance[k] == v for k, v in COMPLIANCE.items())
+                    journal = [json.loads(line) for line in (Path(result['run_directory'])/'demo-actions.jsonl').read_text().splitlines()]
+                    assert len(journal) > 3 and journal[-1]['kind'] == 'terminal', journal
+                    assert [row['index'] for row in journal] == list(range(len(journal)))
+                    assert all(row['episode_command_id'] == 2 for row in journal)
+                    assert all(row['state']['tcp_wrench_K'] == [1., 2., 3., .1, .2, .3] for row in journal)
+                    assert all(len(row['state']['tcp_vel_base']) == 6 for row in journal)
+                    assert any(max(abs(v) for v in row['actions']) < 1e-9 for row in journal[:-1])
+                    assert any(max(abs(v) for v in row['actions']) > .01 for row in journal[:-1])
+                    print(json.dumps(dict(autoserl_protocol=PROTOCOL, journal_rows=len(journal), terminal=True)), flush=True)
+                else:
+                    for axis in ('x', 'y', 'z'):
+                        for sign in ('', 'neg_'):
+                            assert compliance['rotational_clip_' + sign + axis] == .03, result
+                            assert compliance['translational_clip_' + sign + axis] == .005, result
         if disconnect:
             assert 'input connection closed' in result['error'], result
         else:

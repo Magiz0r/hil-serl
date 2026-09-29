@@ -50,6 +50,7 @@ def main():
     mode.add_argument("--execute-attended-manual", action="store_true")
     parser.add_argument("--no-trial-bounds", action="store_true")
     parser.add_argument("--official-input", action="store_true")
+    parser.add_argument("--autoserl-demo", action="store_true")
     parser.add_argument("--pilot-gate", action="store_true")
     parser.add_argument("--official-home", action="store_true")
     parser.add_argument("--home-switch-probe", action="store_true")
@@ -63,6 +64,10 @@ def main():
     args = parser.parse_args()
     manual, free = args.execute_attended_manual, args.no_trial_bounds
     official = args.official_input
+    if args.autoserl_demo and (not official or not args.pilot_gate or args.speed_scale != 1.
+            or args.translation_scale not in (None, 1.) or args.rotation_scale not in (None, 1.)
+            or args.rotation_response != 'standard'):
+        parser.error('--autoserl-demo requires pilot gate, official input, unit scales and standard response')
     if free and not manual:
         parser.error("--no-trial-bounds requires manual mode")
     if official and not (manual and free):
@@ -132,6 +137,7 @@ def main():
                 "/home/tasl/hil_serl_runtime_20260918/source/run_upward_trial.py",
                 action_flag, *(["--no-trial-bounds"] if free else []),
                 *(["--official-input"] if official else []),
+                *(["--autoserl-demo"] if args.autoserl_demo else []),
                 *(["--pilot-gate"] if pilot else []),
                 *(["--official-home"] if args.official_home else []),
                 *(["--home-switch-probe"] if args.home_switch_probe else []),
@@ -144,12 +150,14 @@ def main():
             def receive():
                 try:
                     for line in process.stdout:
-                        events.write(line)
-                        events.flush()
+                        received = time.monotonic()
                         message = json.loads(line)
+                        message['pc_received_at'] = received
+                        events.write(json.dumps(message) + '\n')
+                        events.flush()
                         with lock:
                             shared["message"] = message
-                            shared["received_at"] = time.monotonic()
+                            shared["received_at"] = received
                     with lock:
                         shared["eof"] = True
                 except Exception as error:
@@ -233,6 +241,8 @@ def main():
                         click = None
                     preparation_id = (pilot_command['id'] if pilot and not allowed
                                       and click in ('open', 'close') else None)
+                    if args.autoserl_demo and allowed:
+                        click = None  # Fixed gripper while recording; preparation remains available.
                     gripper.refresh(action=None if operator_stop_latched else click,
                                     stop=operator_stop_latched, preparation_id=preparation_id)
                 if not os.path.exists(path):
@@ -255,6 +265,8 @@ def main():
                                   enable=enabled, stop=stopped)
                     if pilot:
                         packet['pilot'] = arm_command(pilot_command)
+                        if 'policy' in packet['pilot']:
+                            packet['pilot']['policy']['buttons'] = [bool(v) for v in state.buttons[:2]]
                     inputs.write(json.dumps(dict(pc_time=time.monotonic(), hid_stamp=state.t,
                         drained_reports=reports, buttons=list(state.buttons), **packet)) + "\n")
                     inputs.flush()

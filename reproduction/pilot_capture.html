@@ -12,6 +12,7 @@
   <script defer src="/ui/cameras.js"></script>
   <script defer src="/ui/catalog.js"></script>
   <script defer src="/ui/records.js"></script>
+  <script defer src="/ui/training.js"></script>
   <script defer src="/ui/app.js"></script>
 </head>
 <body>
@@ -28,7 +29,7 @@
 </defs></svg>
 <header class="topbar">
   <a class="brand" href="#main" aria-label="TASL FR3 采集工作区"><span class="brand-mark">T<span>↗</span></span><span>TASL <b>FR3</b><small>CAPTURE CONSOLE</small></span></a>
-  <div class="top-context"><span class="divider"></span><span>数据采集</span></div>
+  <div class="top-context"><span class="divider"></span><span>数据采集</span><a href="#training-workbench">训练 / 数据分析 ↓</a></div>
   <div class="top-right"><span id="connection" class="badge muted"><i></i>连接中</span><button id="top-finish" class="button danger compact" disabled><svg><use href="#i-stop"/></svg>Stop · 保存</button></div>
 </header>
 <div id="demo-banner" class="demo-banner" hidden><span><b>演示模式</b> · 模拟数据与画面，所有操作仅在此浏览器内生效</span><label>场景 <select id="demo-state"><option value="idle">就绪 · Idle</option><option value="loading">连接中 · Loading</option><option value="running">采集中 · Running</option><option value="saving">保存中 · Saving</option><option value="homing">回零中 · Homing</option><option value="error">异常 · Error</option><option value="offline">断线 · Offline</option><option value="empty">空记录 · Empty</option></select></label></div>
@@ -65,7 +66,7 @@
           <div class="camera-footer"><span>夹指、抓取与操作细节</span><span id="wrist-age" class="mono">— ms</span></div>
         </figure>
       </div>
-      <div class="capture-guide"><span class="guide-icon">↗</span><div><strong id="guide-instruction">选择任务、摆好场景，开始采集。</strong><p>Start 后松开旋钮回中；左键闭合夹爪，右键张开。</p></div><span class="tag">人工遥操作</span></div>
+      <div class="capture-guide"><span class="guide-icon">↗</span><div><strong id="guide-instruction">选择任务、摆好场景，开始采集。</strong><p id="guide-mode-detail">Start 后松开旋钮回中；左键闭合夹爪，右键张开。</p></div><span id="capture-mode" class="tag">人工遥操作</span></div>
       <div class="telemetry-grid"><div><span class="field-label">机器人状态</span><strong id="robot-detail">等待数据</strong></div><div><span class="field-label">夹爪反馈</span><strong id="gripper-detail">等待数据</strong></div><div><span class="field-label">采集质量</span><strong id="quality-detail">等待数据</strong></div></div>
     </section>
     <aside class="control-column" aria-label="采集与机器人控制">
@@ -87,6 +88,8 @@
         <details id="home-details"><summary>目标与操作说明 <span>＋</span></summary><div class="home-details-body"><p id="home-target" class="mono">—</p><p id="home-error">关节反馈：等待数据</p><p id="home_help">自定义末端 Home 仅用于本次控制会话；先抬升、再横移并返回所设末端位姿。</p><p id="official_home_help" hidden>DROID 七关节目标仅供“返回 DROID”使用。连接和 Start 均从当前位置开始。</p><p>回零前先退出接触区域，确认整条手臂返回路径畅通。</p><button id="set_home" class="button compact" disabled>将当前位置设为 Home</button></div></details>
         <div id="custom-home-panel" class="custom-home-panel"><div class="home-heading"><h3>自定义 Home</h3><button id="custom-home" class="button compact" disabled>返回自定义</button></div><p id="custom-home-status">连接后读取自定义目标</p><button id="set-custom-home" class="button compact" disabled>将当前位置设为自定义 Home</button><details><summary>自定义关节目标 <span>＋</span></summary><p id="custom-home-target" class="mono tiny">尚未设置</p><p id="custom-home-feedback" class="tiny"></p></details><p class="tiny">保存七关节姿态 · 与 DROID 目标独立</p></div>
       </section>
+      <section id="recovery-panel" class="panel home-panel" hidden><div class="home-heading"><h2>单次示范校验 · 不训练</h2><button id="recovery-check" class="button compact" disabled>验证回退 / 重放</button></div><p>按示范原始时间间隔执行：自定义 Home → 接近孔口 → 回退 → 重放一次，随后停住。夹爪保持闭合。</p><p id="recovery-rule" class="tiny"></p><p id="recovery-status" class="tiny" aria-live="polite">等待配置</p><p class="tiny">先结束训练或评估任务。按 Stop 或拨动 SpaceMouse 可中止；请观察是否实际入孔。轨迹检查通过不代表插入成功。</p></section>
+      <section id="online-panel" class="panel home-panel" hidden><div class="home-heading"><h2>AutoSERL 在线训练</h2><button id="online-start" class="button compact" disabled>开始训练回合</button></div><p id="online-status" aria-live="polite">等待训练程序</p><div id="continuous-controls" hidden><div class="finish-actions"><button id="online-success" class="button success" disabled>Success<span>标记本轮成功</span></button><button id="online-failure" class="button danger" disabled>Fail<span>标记本轮失败</span></button><button id="online-toggle" class="button compact" disabled>暂停循环</button></div><p id="continuous-status" aria-live="polite"></p><p class="tiny">成功／失败可在回合停止后补标。退出接触并回到自定义 Home 后，倒计时 2 秒自动下一轮。Stop 暂停循环；点击继续恢复。夹爪保持闭合。</p></div><p class="tiny">插入成功按 SpaceMouse 左键，失败按右键；Stop 或拨动旋钮中止。每回合结束后先退出接触，再返回自定义 Home。</p></section>
     </aside>
     <section class="panel records-panel" aria-label="记录与日志">
       <div class="records-header"><div class="tabs" role="tablist" aria-label="会话信息"><button id="tab-episodes" role="tab" aria-selected="true" aria-controls="pane-episodes" data-tab="episodes">采集记录 <span id="episode-total">0</span></button><button id="tab-logs" role="tab" aria-selected="false" aria-controls="pane-logs" data-tab="logs" tabindex="-1">事件日志 <span id="log-total">0</span></button><button id="tab-session" role="tab" aria-selected="false" aria-controls="pane-session" data-tab="session" tabindex="-1">会话信息</button></div><span class="tiny records-scope">当前采集会话</span></div>
@@ -98,6 +101,36 @@
       <div id="pane-session" role="tabpanel" aria-labelledby="tab-session" hidden><dl class="session-info"><div><dt>数据目录</dt><dd><code id="directory">等待连接</code><button id="copy-directory" class="icon-button" aria-label="复制数据目录"><svg><use href="#i-copy"/></svg></button></dd></div><div><dt>采集链路</dt><dd>浏览器 → Desktop 录制器 → 本次 SpaceMouse 控制会话 → NUC</dd></div><div><dt>结束采集</dt><dd>Stop 停用输入并保存当前条目，保持实测位姿；不会关闭整个控制服务。</dd></div><div><dt>退出会话</dt><dd>SpaceMouse 双键同时按下退出控制。关闭浏览器不会停止录制器。</dd></div><div><dt>记录内容</dt><dd>两路原图、机器人状态、SpaceMouse 输入、夹爪反馈与命令。尚未转换为训练数据。</dd></div></dl></div>
     </section>
   </div>
+  <section id="training-workbench" class="training-workbench" hidden aria-label="训练与数据分析">
+    <div class="page-heading"><div><div class="eyebrow">ONLINE LEARNING</div><h2>训练与数据分析</h2></div><button id="models-refresh" class="button compact">刷新模型与记录</button></div>
+    <div class="training-grid">
+      <section class="panel training-setup"><div class="panel-heading"><h2>准备任务</h2><span id="model-job-state" class="tiny">未启动</span></div><div class="training-body">
+        <label class="field-label" for="training-mode">运行方式</label><select id="training-mode"><option value="fresh">从头训练</option><option value="resume">从已有模型继续训练</option><option value="evaluate_unassisted">独立策略评估 · 无自动干预</option><option value="evaluate">辅助评估 · 有自动干预</option></select>
+        <p id="training-mode-help" class="tiny">使用当前 1 条 demo，新建一次训练记录。</p>
+        <div id="model-selection" hidden><label class="field-label" for="model-run">模型来源</label><select id="model-run"></select><label class="field-label" for="model-checkpoint">选择模型</label><select id="model-checkpoint"></select></div>
+        <div id="evaluation-settings" hidden><label class="field-label" for="evaluation-episodes">评估轮数</label><input id="evaluation-episodes" type="number" min="1" max="100" value="5"></div>
+        <label class="field-label" for="training-time-limit">每轮时限（秒，0 = 不限时）</label><input id="training-time-limit" type="number" min="0" step="1" value="0">
+        <button id="training-time-save" class="button compact">保存时限</button><p id="training-time-help" class="tiny" aria-live="polite">默认不限时；修改保存后从下一轮生效。</p>
+        <p id="model-demo" class="tiny"></p><div class="training-actions"><button id="model-prepare" class="button primary">准备任务</button><button id="model-end" class="button" disabled>结束任务并保存</button></div>
+        <p id="model-preparation-help" class="tiny">准备只加载模型并保持暂停；回到自定义 Home 后，点击“开始运行”。每轮仍需手动退出接触并复位。</p>
+        <p id="model-job-detail" class="tiny" aria-live="polite"></p><p id="training-error" class="bad" role="alert"></p>
+      </div></section>
+      <section class="panel training-live"><div class="panel-heading"><h2>当前运行</h2><span id="training-live-phase" class="tiny">暂无运行</span></div><div class="training-body">
+        <div class="training-kpis"><div><span>本轮 Return</span><strong id="training-live-return">—</strong></div><div><span>回合 / 步数</span><strong id="training-live-step">—</strong></div><div><span>模型更新次数</span><strong id="training-live-updates">—</strong></div></div>
+        <p id="training-live-model" class="tiny"></p><p id="training-live-message" aria-live="polite">准备任务后在这里开始。</p>
+        <div class="training-actions"><button id="training-run-toggle" class="button primary" disabled>开始运行</button><button id="training-mark-success" class="button success" disabled>本轮成功</button><button id="training-mark-failure" class="button danger" disabled>本轮失败</button></div>
+        <p class="tiny">当前奖励：插入成功为 1，否则为 0。过程中 Return 通常为 0；停止后补标会更新最终 Return。独立策略评估关闭自动干预，辅助评估保留自动干预。</p>
+      </div></section>
+    </div>
+    <section class="panel training-data"><div class="panel-heading"><h2>历史记录与曲线</h2><button id="training-export" class="text-button" disabled>导出回合 CSV ↗</button></div>
+      <div class="training-data-toolbar"><label for="training-history">查看记录</label><select id="training-history"></select><label><input id="training-follow" type="checkbox" checked> 跟随当前任务</label><span id="training-data-age" class="tiny">等待记录</span></div>
+      <div class="training-kpis training-history-kpis"><div><span>成功 / 已结束</span><strong id="training-success-total">—</strong></div><div><span>最近 10 轮成功</span><strong id="training-success-recent">—</strong></div><div><span>平均 Return</span><strong id="training-mean-return">—</strong></div><div><span>自动干预动作</span><strong id="training-auto-fraction">—</strong></div></div>
+      <p id="training-data-note" class="tiny training-note">已结束回合以最终人工标记为准；训练与冻结评估分别统计。</p>
+      <div class="training-charts"><figure><figcaption>每轮 Return <small>横轴：回合</small></figcaption><svg id="chart-return" viewBox="0 0 520 180" role="img" aria-label="每回合 Return 曲线"></svg></figure><figure><figcaption>最近 10 轮成功率 <small>横轴：回合</small></figcaption><svg id="chart-success" viewBox="0 0 520 180" role="img" aria-label="最近十轮成功率曲线"></svg></figure></div>
+      <details class="training-learner"><summary>学习过程：Q 值、Loss、策略熵</summary><p id="learner-summary" class="tiny">等待训练日志；冻结评估不会产生梯度更新。</p><div class="training-charts"><figure><figcaption>平均 Q 值 <small>横轴：更新次数</small></figcaption><svg id="chart-q" viewBox="0 0 520 180" role="img" aria-label="平均 Q 值曲线"></svg></figure><figure><figcaption>Critic Loss <small>横轴：更新次数</small></figcaption><svg id="chart-loss" viewBox="0 0 520 180" role="img" aria-label="Critic Loss 曲线"></svg></figure></div><p class="tiny">Q 值是模型的回报估计，不代表实际成功率。</p></details>
+      <div class="table-scroll"><table><thead><tr><th>回合</th><th>结果</th><th>Return</th><th>步数</th><th>自动干预</th><th>停止原因</th><th>标记状态</th></tr></thead><tbody id="training-episodes"></tbody></table></div><p id="training-empty" class="tiny training-note">暂无训练数据。</p>
+    </section>
+  </section>
   <footer class="page-footer"><span><span class="footer-logo">TASL</span> ROBOT LEARNING LAB</span><span id="footer-mode">FR3 · 手动示范采集</span><a href="#main">返回工作区 ↑</a></footer>
 </main>
 <div class="mobile-controls" aria-label="快捷采集操作"><span id="mobile-state">等待连接</span><button id="mobile-start" class="button primary" disabled>Start</button><button id="mobile-success" class="button success" disabled>Success</button><button id="mobile-failure" class="button danger" disabled>Fail</button><button id="mobile-finish" class="button stop" disabled>Stop</button></div>

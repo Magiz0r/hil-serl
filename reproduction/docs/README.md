@@ -12,7 +12,9 @@
 | [../nuc/README.md](../nuc/README.md) | NUC 源码、插件构建、清单与预检索引 |
 | [../environment/README.md](../environment/README.md) | 环境重建、锁文件与离线验证 |
 | [../configs/README.md](../configs/README.md) | 相机配置、任务种子和历史控制基线 |
-| [../autoserl/README.md](../autoserl/README.md) | AutoSERL 适配、测试与训练数据衔接限制 |
+| [../autoserl/README.md](../autoserl/README.md) | AutoSERL 训练 / 续训 / 冻结评估、模型与数据、当前适配 |
+| [../autoserl/DEMO_CAPTURE.md](../autoserl/DEMO_CAPTURE.md) | 当前单条示范、恢复点、采集与导出 |
+| [../autoserl/RESULTS.md](../autoserl/RESULTS.md) | 有效训练、独立评估结果及模型来源 |
 | [history/README.md](history/README.md) | 按时间保存的旧部署、旧页面与验证记录 |
 
 ## Desktop 源码职责
@@ -23,11 +25,16 @@
 | `start_capture_console.py` | 相机和 HTTP 生命周期、显式连接/断开机器人控制 |
 | `record_manual_pilot.py` | Recorder、设备新鲜度检查、录制循环、HTTP 路由 |
 | `pilot_control.py`、`pilot_gripper.py` | 本地控制命令与心跳、采集前夹爪开合仲裁 |
+| `pilot_online.py` | 仅回环地址可用的策略动作接口、执行确认与新鲜观测 |
+| `pilot_training.py` | 常驻任务邮箱、人工标签、起点检查和每轮时限 |
+| `pilot_experiments.py` | 模型目录、准备 / 结束任务、续训来源和历史指标 |
+| `pilot_health.py` | 输入和反馈超时、恢复事件及延迟诊断日志 |
 | `spacemouse_upward_trial.py`、`gripper_bridge.py`、`gripper_buttons.py` | SpaceMouse 输入、Desktop→NUC 通道、RS485 独立读写和按键语义 |
 | `pilot_catalog.py` | Task / Prompt / Layout 和参考图 |
 | `pilot_dataset.py`、`validate_pilot.py` | episode 文件、样本和校验 |
 | `pilot_records.py`、`pilot_video.py` | 历史库、结果补标、MP4 导出和回放 |
 | `pilot_web.py`、`pilot_capture.html`、`pilot_ui/` | 静态资源、状态展示、前端与 API 适配 |
+| `pilot_ui/training.js` | 模型选择、训练 / 评估控件、曲线与 CSV 导出 |
 | `preview_pilot.py`、`pilot_ui/demo.js` | 无设备的演示服务器和浏览器内模拟 |
 
 模块均位于 `reproduction/`。现有启动脚本、同目录导入及 NUC 摘要依赖这些路径，因此归档文档时保留运行源码路径。

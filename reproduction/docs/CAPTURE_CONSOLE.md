@@ -1,6 +1,6 @@
 # TASL FR3 · Capture Console
 
-当前 HIL-SERL / SpaceMouse 的真实数据采集网页，支持多任务、Prompt、Layout、双相机、采集、DROID Home 和历史记录。沿用原有录制器、输入门控、NUC 独立控制容器和 RS485 夹爪路径。无前端构建步骤，不需要 RLinf/OpenPI 模型服务或 RTC。
+当前 HIL-SERL / SpaceMouse 的真实数据采集网页，支持多任务、Prompt、Layout、双相机、采集、DROID Home 和历史记录；AutoSERL 模式增加在线训练、模型续训、冻结评估和数据分析。沿用原有录制器、输入门控、NUC 独立控制容器和 RS485 夹爪路径。无前端构建步骤，不需要 RLinf/OpenPI 模型服务或 RTC。
 
 ## 启动真实网页
 
@@ -9,6 +9,10 @@
 ```bash
 bash ~/hil-serl/start_capture.sh
 ```
+
+当前 FMB 插入示范、训练和评估使用 `bash ~/hil-serl/start_capture.sh --autoserl-demo`。
+该模式固定夹爪，采用与示范一致的 AutoSERL 动作与控制配置；不能复用普通手动模式
+的已运行服务。连接后仍保持锁定，模型须单独准备并点击开始。流程见下文 AutoSERL 一节。
 
 本机地址是 <http://127.0.0.1:8765/>，Tailscale 地址是 <http://100.79.65.37:8765/>。直接打开即可，无需 access 链接、登录或 Cookie 验证。启动输出及 `reproduction/runtime/capture-console/service.json` 提供普通访问地址。能够连接该地址的用户均可使用网页。
 
@@ -47,7 +51,7 @@ bash ~/hil-serl/start_capture.sh --web-only
 
 低层前台入口仍可使用 `python reproduction/start_capture_console.py --tailscale`，默认只开网页；追加 `--connect` 请求控制连接。网页加载、刷新、切换任务、拍 Layout 和看记录本身不启动控制器。
 
-固定控制配置沿用近期会话：`--speed-scale 2 --translation-scale 1.6 --rotation-scale 3 --rotation-response responsive --gripper-speed 192 --pilot-gate --official-home`，没有放宽关节速度、误差或失联检查，也没有自动恢复机械臂错误。准备失败时显示错误和本次预检日志路径；任务、历史记录和可用的相机仍可使用。
+普通手动模式沿用：`--speed-scale 2 --translation-scale 1.6 --rotation-scale 3 --rotation-response responsive --gripper-speed 192 --pilot-gate --official-home`。AutoSERL 使用单位动作尺度、standard 响应及专用 COMPLIANCE，具体差异见 [AutoSERL 手册](../autoserl/README.md)。两种模式均不自动恢复机械臂错误。准备失败时显示错误和本次预检日志路径；任务、历史记录和可用的相机仍可使用。
 
 “断开控制”关闭本网页拥有的录制器和控制进程；正在采集时先 Stop。连接途中可取消，取消后的预检结果不会启动控制器。使用低层前台入口时，该终端 Ctrl-C 会清理本网页的控制连接和相机。不会接管其他容器、修改 Desk 开关或执行 Home。连接日志位于 `reproduction/runtime/capture-console/<UTC>_<随机后缀>/`。
 
@@ -57,7 +61,7 @@ bash ~/hil-serl/start_capture.sh --web-only
 
 采集插入等“起始时已夹持物体”的任务时，连接控制后使用 Start 附近的 **打开夹爪 / 闭合夹爪**。先打开、放入物体、闭合并查看反馈，手离开相机画面后再 Start。准备过程中不创建 episode、不保存采集图像，机械臂保持当前位置；Start 不重新开合夹爪。Home 仍不自动开合夹爪。
 
-这两个按钮仅在设备就绪、未录制、机械臂保持且没有待完成命令时可用。夹爪动作期间禁止 Start / Home，Stop 随时中断；采集中继续使用 SpaceMouse 左 / 右键控制。反馈区区分动作中、接触物体、目标到位与数据过期，并显示实际位置 0–255；接触反馈不能代替操作者确认物体已夹稳。
+这两个按钮仅在设备就绪、未录制、机械臂保持且没有待完成命令时可用。夹爪动作期间禁止 Start / Home，Stop 随时中断；普通采集时使用 SpaceMouse 左 / 右键开合，AutoSERL 采集和策略运行时固定夹爪。反馈区区分动作中、接触物体、目标到位与数据过期，并显示实际位置 0–255；接触反馈不能代替操作者确认物体已夹稳。
 
 `POST /command` 新增 `gripper_open` / `gripper_close`。Desktop 等待机械臂确认 `lock` 后，通过已有独立 RS485 通道发送一次开合，不启用六轴输入。`GET /status.gripper_preparation` 将本次门控编号与真实夹爪命令编号关联；只有同一命令的目标、到位/接触和无故障反馈才确认完成。10 秒未完成则请求 hold 并报告错误，不生成记录。无需改 NUC 源码或控制器；更新后重启网页及本项目控制会话生效。
 
@@ -111,6 +115,28 @@ Home 是独立操作：采集中拒绝，Home 中禁止 Start，Stop 可中断�
 
 **Home 保留当前项目语义，不自动开合夹爪。** 网页按钮旁明确提示这一点。页面加载和连接完成均不执行 Home。
 
+## AutoSERL 训练与数据分析
+
+在页面下方选择 **从头训练 / 从已有模型继续训练 / 独立策略评估 · 无自动干预 /
+辅助评估 · 有自动干预**。续训和评估须选定实验与 checkpoint；评估轮数 1–100。
+**准备任务** 只加载并暂停，**开始运行** 才会在 Home 检查通过后开始。
+**结束任务** 保存并退出网页启动的模型进程，再切换任务或模型。
+
+每轮由人确认 Success / Fail、退出接触并返回 custom Home，稳定后自动下一轮。
+Stop 暂停，无标签的停止显示“待标记”，不计失败或平均 Return；先标记才能换轮。
+SpaceMouse 左键成功、右键失败，拨动旋钮可中止策略；固定夹爪不松开。
+每轮时限默认 `0`（不限时），保存后从下一轮生效；限时停止也等待人工判定。
+
+历史面板显示 Return、成功率、干预率、停止原因与 Q / Loss / 熵，可导出最近最多
+1000 轮的 CSV。冻结评估不更新模型，独立评估关闭示范引导和回退重放。
+W&B 可由独立进程同步数值，详见 [AutoSERL 手册](../autoserl/README.md)。
+当前结果为带辅助训练后十轮 10/10、无辅助评估 1/10，来源与局限见
+[实验结果](../autoserl/RESULTS.md)。
+
+**单次示范校验 · 不训练** 是另一个诊断入口，不加载模型、不产生训练结果。
+已准备或正在启动模型时禁用此入口。连接故障及恢复写入会话的
+`health-events.jsonl`，`/status.health` 保存最近异常；恢复通信不会自动重发动作。
+
 ## 演示模式
 
 ```bash
@@ -131,6 +157,8 @@ python3 reproduction/preview_pilot.py --port 8766 --tailscale
 | `pilot_ui/api.js` / `demo.js` | API 适配和独立演示数据 |
 | `pilot_ui/catalog.js` / `pilot_catalog.py` | 多任务、Prompt、场景与参考图 |
 | `pilot_ui/records.js` / `pilot_records.py` | 历史记录、双视角回放与标注 |
+| `pilot_ui/training.js` / `pilot_experiments.py` | 模型选择、实验生命周期、指标曲线和 CSV |
+| `pilot_training.py` / `pilot_online.py` / `pilot_health.py` | 常驻任务邮箱、策略动作确认与超时诊断 |
 | `pilot_video.py` | MP4 后台生成、历史补生成与导出状态 |
 | `pilot_ui/cameras.js` / `app.js` | 视频恢复、控制器确认、Home、设备状态和日志 |
 | `pilot_web.py` / `preview_pilot.py` | 静态资源允许列表、只读状态摘要、纯演示服务器 |
@@ -150,6 +178,10 @@ python3 reproduction/preview_pilot.py --port 8766 --tailscale
 | `GET /episodes/<id>/<camera>.mp4` | MP4 播放/下载，支持 HTTP Range 与 HEAD |
 | `POST /episodes`，`action: export_video` | 请求生成或重试双视角 MP4 |
 | `POST /episodes` | update / delete；仅已保存记录可修改 |
+| `GET /models`、`GET /training-data?run=<id>` | 真实实验 / checkpoint 目录和选定实验指标 |
+| `POST /experiments` | 准备训练 / 评估、结束任务；限定模式和已知模型 |
+| `POST /training`、`POST /training-settings` | 成功 / 失败 / 暂停 / 继续，以及每轮时限 |
+| `POST /autoserl` | 仅回环地址可用的策略动作与观测接口 |
 
 HTTP 202 只表示请求接收，控制操作仍等待真实命令编号和状态确认。重要错误显示于相应区域并记录到页面日志；日志仅在用户位于底部时跟随。数据过期明确标注，画面独立重连，不自动重发机械臂动作。
 
@@ -169,6 +201,6 @@ PILOT_SCREENSHOT_DIR=reproduction/logs/capture-ui-2026-09-21 \
 
 2026-09-22 的一次预检曾因 J4 超出当时模型配置下限 0.003130 rad 而拒绝连接；具体证据保存在本机 `reproduction/logs/portal-check-2026-09-22/`。这是历史失败记录，不表示当前仍受该问题阻塞。随后已完成真实采集并保存 MP4；当前是否能够连接、采集和 Home 必须读取实际设备状态。
 
-2026-09-23 目录整理时，`reproduction/tests` 与 `reproduction/autoserl/tests` 全量运行 182 项通过；包含模拟 HTTP/Unix socket 和 Chrome，不执行真实机器人动作。第三台 ZED 2i 已从 USB/sysfs 识别，但当前仍只录制配置中的 `external`、`wrist` 两路。
+2026-09-29 整理时，`reproduction/tests` 与 `reproduction/autoserl/tests` 全量运行 305 项通过；包含模拟 HTTP/Unix socket 和 Chrome，不执行真实机器人动作。2026-09-24 将 `external` 切至第三台 ZED 2i（USB `3.4.1`），仍录制 `external`、`wrist` 两路。旧 episode 保留原视角；需用于新视角的 Layout 参考图应重新拍摄。
 
-尚未接入：网页 Jog、夹爪模式选择、Recover/Reset NUC/解锁锁定按钮、224×224 训练预处理预览及 HIL-SERL replay buffer 导出。网页支持采集前独立开合夹爪，采集中运动和夹爪由已有 SpaceMouse 控制，保存的是原始双视角及轨迹。模型 checkpoint、RTC、steering、自动评测不属于本次手动采集页面。
+尚未接入：网页 Jog、夹爪模式选择、Recover/Reset NUC/解锁锁定按钮、224×224 训练预处理预览、RTC 和 steering。AutoSERL 示范通过专用导出器转换为训练 transition；普通手动 episode 不能直接充当训练 replay。网页已有模型选择和冻结评估，但奖励标签、退出接触及复位仍需人工完成。

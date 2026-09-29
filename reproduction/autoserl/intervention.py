@@ -243,7 +243,10 @@ class AutoIntervention(gym.ActionWrapper):
             new_action = self.transform_action_inv(new_action)
         self.prev_currpos = copy.deepcopy(self.env.currpos)
         obs, rew, done, truncated, info = self.env.step(new_action)
-        rew = (self.left)
+        # The portal controller can observe buttons during an in-flight action.
+        # Its acknowledgement is authoritative for those timestamped labels.
+        rew = bool(info.get('operator_success', self.left))
+        self.right = bool(info.get('operator_abort', self.right))
 
         done = bool(done or rew or self.right)
         info['succeed'] = bool(rew)
@@ -257,7 +260,7 @@ class AutoIntervention(gym.ActionWrapper):
         self.current_step += 1
 
         if replaced:
-            info["intervene_action"] = new_action
+            info["intervene_action"] = info.get('executed_action', new_action)
         if (self.intervened_slide_idx == -1):
             self.slide_window.pop(0)
             self.slide_window.append(min(self.slide_window[-1]+1, len(self.current_demo_tcp_list)-1))

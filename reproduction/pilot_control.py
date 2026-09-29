@@ -6,9 +6,10 @@ import os
 from pathlib import Path
 import socket
 import time
+import threading
 from pilot_gripper import PREPARE_ACTIONS
 
-ACTIONS = ('lock', 'start', 'set_home', 'home', 'set_custom_home', 'custom_home', *PREPARE_ACTIONS)
+ACTIONS = ('lock', 'start', 'set_home', 'home', 'set_custom_home', 'custom_home', 'recovery_check', 'policy_start', *PREPARE_ACTIONS)
 
 
 class PilotSocket:
@@ -28,7 +29,7 @@ class PilotSocket:
             except BlockingIOError:
                 break
             packet = json.loads(raw)
-            if len(raw) > 1024 or set(packet) != {'id', 'action', 'stamp'}:
+            if len(raw) > 1024 or set(packet) not in ({'id', 'action', 'stamp'}, {'id','action','stamp','policy'}):
                 raise ValueError('invalid pilot control packet')
             if type(packet['id']) is not int or packet['id'] < self.latest['id']:
                 raise ValueError('unordered pilot control command')
@@ -40,7 +41,13 @@ class PilotSocket:
         else:
             raise ValueError('pilot control queue did not drain')
         connected = self.received and 0 <= time.monotonic() - self.latest['stamp'] <= .4
-        return dict(id=self.latest['id'], action=self.latest['action'], connected=connected)
+        result = dict(id=self.latest['id'], action=self.latest['action'], connected=connected)
+        if 'policy' in self.latest:
+            p=self.latest['policy']
+            if self.latest['action']!='policy_start' or set(p)!={'index','action','stamp'}:
+                raise ValueError('invalid policy envelope')
+            result['policy']=dict(index=p['index'], action=p['action'], age=time.monotonic()-p['stamp'], buttons=[False,False])
+        return result
 
     def close(self):
         self.socket.close()
@@ -64,17 +71,29 @@ class PilotClient:
             self.claim.close()
             raise
         self.id, self.action = max(0, initial_id) + 1, 'lock'
+        self.policy = None
+        self.lock = threading.RLock()
 
     def issue(self, action):
         if action not in ACTIONS:
             raise ValueError('invalid pilot command')
-        self.id += 1
-        self.action = action
-        self.refresh()
-        return self.id
+        with self.lock:
+            self.id += 1
+            self.action = action
+            self.policy = None
+            self.refresh()
+            return self.id
+
+    def set_policy(self, index, action):
+        with self.lock:
+            if self.action != 'policy_start': raise ValueError('online control is stopped')
+            self.policy = dict(index=index, action=list(action), stamp=time.monotonic())
+            self.refresh()
 
     def refresh(self):
-        self.socket.send(json.dumps(dict(id=self.id, action=self.action, stamp=time.monotonic())).encode())
+        with self.lock:
+            self.socket.send(json.dumps(dict(id=self.id, action=self.action, stamp=time.monotonic(),
+                **({'policy':self.policy} if self.policy is not None else {}))).encode())
 
     def close(self):
         try:

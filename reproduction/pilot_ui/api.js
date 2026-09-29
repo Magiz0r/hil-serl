@@ -18,6 +18,11 @@ const PilotAPI = (() => {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
     }),
     runtime: action => request('/runtime',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
+    training: data => request('/training',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
+    trainingSettings: data => request('/training-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
+    models: () => request('/models'),
+    trainingData: run => request('/training-data?run='+encodeURIComponent(run)),
+    experiment: data => request('/experiments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
     frames: id => isDemo ? Promise.resolve([{seconds:0,external:PilotDemo.image('external'),wrist:PilotDemo.image('wrist')}]) : request('/episodes/'+id+'/frames'),
     review: data => isDemo ? PilotDemo.review(data) : request('/episodes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
     command: command => isDemo ? PilotDemo.command(command) : request('/command', {

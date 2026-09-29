@@ -1,0 +1,13 @@
+{
+  "schema": "autoserl_image_preprocessing_v1",
+  "size": [128, 128],
+  "color": "RGB",
+  "interpolation": "INTER_AREA",
+  "crops_xywh": {
+    "external": [360, 0, 720, 720],
+    "wrist": [320, 0, 720, 720]
+  },
+  "source_resolution_wh": [1280, 720],
+  "reviewed_episode": "episode_20260924T200818552870Z_b6c516c0",
+  "notes": "Square crops preserve the demonstrated peg approach and target area. Original full-resolution frames remain unchanged. Wrist view is partly occluded by the gripper near insertion; external view provides complementary coverage. Use the same preprocessing for online observations."
+}

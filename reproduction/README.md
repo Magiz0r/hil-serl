@@ -4,24 +4,25 @@
 
 ## 当前进展
 
-截至 **2026-09-23**，日常入口为 TASL FR3 · Capture Console，已保存真实双视角演示。网页支持任意 Task / Layout、Success / Fail / Stop、历史记录与 MP4、DROID / 自定义 Home，以及采集前独立开合夹爪。实时服务状态请看网页；文档中的日期表示验证时间。
+整理于 **2026-09-29**，最近实机实验为 2026-09-26 UTC（本地 09-25）。日常入口为 TASL FR3 · Capture Console，支持双视角采集、Task / Layout、人工标签、Home、夹爪准备，以及 AutoSERL 从头训练、选择模型续训、冻结评估和数据分析。实时服务状态请看网页；文档中的日期表示验证时间。
 
 | 项目 | 已验证内容 |
 | --- | --- |
 | Python / GPU | 独立 Conda `hilserl`，Python 3.10.21，JAX 0.4.35 / jaxlib 0.4.34，RTX 4090 计算通过 |
-| 离线功能 | 回归测试覆盖启动/关闭、录制与结果、HTTP、界面、Home、夹爪和 AutoSERL；另有合成 ROS / C++ 插件验证入口 |
-| 相机 | 已接入 ZED 2i 外部与 ZED-M 腕部两路，15 FPS 读取、约 10 Hz 记录；第三台 ZED 2i 已识别，尚未接入 |
+| 离线功能 | 2026-09-29 完整回归 305 项通过，覆盖采集、HTTP、Chrome 界面、Home、夹爪、续训和评估；使用模拟硬件 |
+| 相机 | 外部视角已切至第三台 ZED 2i（USB `3.4.1`），腕部仍为 ZED-M；两路 15 FPS 读取、约 10 Hz 记录 |
 | 夹爪 | Robotiq 2F-85 USB-RS485；FC03 通过，已激活且无错误；左右键开合、接触停止和双键退出实测通过 |
 | 机械臂 | FR3 系统 5.9.2；保持、六轴平移和旋转实测，最后一轮无机器人错误 |
 | 人工输入 | SpaceMouse Wireless BT USB `256f:c63a`；无需按住左键，双键退出；`--with-gripper` 可启用左右键开合 |
-| 数据 | 多任务原始演示、双视角 MP4、人工结果与备注；尚未转换成完整训练 transition |
-| AutoSERL | 自动干预适配、离线 mock 测试和合成学习链路；实机在线训练与论文成功率尚未复现 |
+| 数据 | 当前一条 FMB 成功示范为 171 条 transition，恢复点 60/90；旧 147 条示范另存历史 |
+| AutoSERL | 当前续训 20 轮成功 14/20，后十轮 10/10 且自动干预占 18.4%；冻结模型无干预评估 1/10，独立策略尚不稳定 |
+| 模型与分析 | 网页选择 checkpoint、Return / 成功率 / 干预率 / Loss 曲线与 CSV；独立 W&B 数值同步；训练累积 3258 条 online，最终 checkpoint 6772 |
 
-实际手动数据采集与完整 actor/learner 训练是独立阶段。现有试录任务为方块入杯，可在网页创建其他任务；GELLO 尚未接入。Prompt 仅作为记录说明保存，当前不参与策略输入。
+实际手动采集与 actor/learner 训练是独立阶段。当前 AutoSERL 任务为固定板、预夹持单插块的 FMB 插入；方块入杯为较早采集任务。GELLO 尚未接入，Prompt 仅保存为记录说明。实验来源和局限见 [当前结果](autoserl/RESULTS.md)，不能将带干预成功率作为论文独立策略成功率。
 
 ## 目录与入口
 
-采集网页一键启动：`bash ~/hil-serl/start_capture.sh`；完整关闭：`bash ~/hil-serl/stop_capture.sh`。启动后在网页选择 Task / Layout，再点 Start 采集。仅查看网页和相机可加 `--web-only`。详见 [Capture Console 说明](docs/CAPTURE_CONSOLE.md)。
+普通采集启动：`bash ~/hil-serl/start_capture.sh`；当前 AutoSERL 使用 `bash ~/hil-serl/start_capture.sh --autoserl-demo`；完整关闭：`bash ~/hil-serl/stop_capture.sh`。启动不开始录制、Home 或策略动作；训练区“准备任务”加载模型后仍暂停。仅查看网页和相机可加 `--web-only`。详见 [Capture Console 说明](docs/CAPTURE_CONSOLE.md) 和 [AutoSERL 操作手册](autoserl/README.md)。
 
 | 路径 | 用途 |
 | --- | --- |
@@ -29,7 +30,8 @@
 | [capture_portal.py](capture_portal.py)、[start_capture_console.py](start_capture_console.py) | Bash 启动管理、相机/网页及机器人控制会话生命周期 |
 | [record_manual_pilot.py](record_manual_pilot.py)、`pilot_*.py` | HTTP、采集、任务/Layout、门控、数据校验、记录和 MP4 |
 | [pilot_capture.html](pilot_capture.html)、[pilot_ui/](pilot_ui/) | 原生 HTML/CSS/JavaScript；含与真实接口隔离的演示模式 |
-| [autoserl/](autoserl/) | AutoSERL 自动干预适配、离线学习检查与原始数据兼容性分析 |
+| [autoserl/](autoserl/) | 示范导出、自动干预、异步在线 SAC、续训、冻结评估与 W&B 同步 |
+| [autoserl/RESULTS.md](autoserl/RESULTS.md) | 当前训练 / 独立评估结果、模型来源与尚待验证的问题 |
 | [docs/README.md](docs/README.md) | 当前手册、模块索引和历史文档入口 |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | 当前硬件适配、数据隔离与待完成事项 |
 | [docs/SPACEMOUSE.md](docs/SPACEMOUSE.md) | 官方映射、当前操作方式及实现差异 |

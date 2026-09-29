@@ -19,8 +19,26 @@ window.testState={ready:true,recording:false,episodes:[],sample_count:0,director
  task:{name:'block_into_cup'},sample_hz:10,camera_ages:{external:.02,wrist:.03},telemetry:{gripper:{ok:true,age:.02,detail:'保持',preparation_supported:true},gripper_position:0},
  pilot:{mode:'locked',home_set:true,home_kind:'official_joint',home:{q:[0,-.78,0,-2.35,0,1.57,.78]},command_id:0,command:'lock',custom_home:{available:false,saving:false,q:null,persistent:true}},pending:null};
 window.testOffline=false;window.testDelay=0;window.testReject=false;
+window.testModelCommands=[];
+window.testSettingsCommands=[];
+window.testModels={initial_demo_episodes:1,demo_name:'single-demo.pkl',runs:[{id:'run1',name:'training-50',kind:'training',checkpoints:[{id:'latest',updates:13588,saved_unix:1790294046},{id:'early',updates:4677,saved_unix:1790292083}]}]};
+window.testTrainingData={run_id:'run1',name:'training-50',generated_unix:1790294046,summary:{episodes:1,excluded_episodes:0,successes:0,last10_successes:0,last10_count:1,mean_return:0,transitions:95,automatic_fraction:.4},episodes:[{episode:1,outcome:'failure',return_:0,steps:95,automatic_interventions:38,reason:'force_limit',valid:true,provisional:true,success_last10:0}],learner:[{updates:13588,online_steps:6398,q:1.9,critic_loss:.002,actor_loss:-1.8,entropy:-2.8}]};
 window.fetch=async(path,options={})=>{
  if(testOffline) throw Error('simulated disconnect');
+ if(path==='/models')return {ok:true,json:async()=>testModels};
+ if(path==='/training-settings'){
+  const data=JSON.parse(options.body);testSettingsCommands.push(data);testState.training_settings=data;
+  return {ok:true,json:async()=>data};
+ }
+ if(path.startsWith('/training-data?'))return {ok:true,json:async()=>testTrainingData};
+ if(path==='/experiments'){
+  const data=JSON.parse(options.body);testModelCommands.push(data);
+  if(data.action==='prepare'){
+   testState.experiment={phase:'ready',active:true,managed:true,can_prepare:false,run_id:'run1',mode:data.mode,model_label:data.model_id || 'fresh'};
+   testState.training={available:true,session_id:'prepared',episode:0,phase:'paused',enabled:false,can_label:false,steps:0,gradient_updates:0,episode_return:0,message:'已准备，保持暂停'};
+  }else{testState.experiment={phase:'ended',active:false,can_prepare:true};testState.training.available=false;}
+  return {ok:true,json:async()=>({accepted:true})};
+ }
  if(path==='/command'){
   const value=JSON.parse(options.body).command;testCommands.push(value);
   if(testReject) return {ok:false,status:400,json:async()=>({error:'controller rejected command'})};
@@ -38,12 +56,20 @@ window.fetch=async(path,options={})=>{
    if(value.startsWith('finish') && testState.recording) testState.episodes.push({name:'episode_0001',samples:12,outcome:value.split('_')[1]||'unlabeled',created_unix:100,duration_seconds:1.2,task:'block_into_cup'});
    testState.recording=value==='start';
    testState.pilot.mode=['home','custom_home'].includes(value)?'homing':value==='start'?'manual':'locked';
+   if(value==='recovery_check'){testState.pilot.mode='recovery_check';testState.pilot.recovery_check.phase='approach';}
    if(['home','custom_home'].includes(value))testState.pilot.active_home=value==='home'?'droid':'custom';
    if(value==='set_custom_home')testState.pilot.custom_home={available:true,saving:false,persistent:true,q:[.1,-.65,.08,-2.4,.05,1.9,.1],saved_unix:Date.now()/1000,joint_error_rad:0};
   },testDelay);
   return {ok:true,json:async()=>({accepted:true})};
  }
  if(path==='/status')return {ok:true,json:async()=>structuredClone(testState)};
+ if(path==='/training'){
+  const value=JSON.parse(options.body);testCommands.push(value);
+  if(value.action==='pause')testState.training.enabled=false;
+  if(value.action==='resume')testState.training.enabled=true;
+  if(['success','failure'].includes(value.action))testState.training.label=value.action;
+  return {ok:true,json:async()=>({accepted:true})};
+ }
  throw Error('unexpected network access: '+path);
 };
 '''
@@ -51,6 +77,167 @@ window.fetch=async(path,options={})=>{
 
 @unittest.skipUnless(shutil.which('google-chrome'), 'Chrome is not installed')
 class PilotBrowserTests(unittest.TestCase):
+    def test_duration_can_be_saved_while_running_without_starting_or_stopping(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.experiment={phase:'ready',active:true,managed:true,can_prepare:false,run_id:'run1',mode:'fresh'};
+testState.training={available:true,session_id:'live',episode:0,phase:'running',enabled:true,can_label:true,time_limit_seconds:0,message:'运行中'};
+testState.training_settings={time_limit_seconds:0};await settle(1200);
+check(byId('training-time-limit').value==='0' && byId('training-live-message').textContent.includes('不限时'),'default duration is not unlimited');
+byId('training-time-limit').value='90';byId('training-time-limit').dispatchEvent(new Event('input'));await settle();
+check(byId('training-time-limit').value==='90','status refresh overwrote edited limit');
+byId('training-time-save').click();await settle();
+check(testSettingsCommands[0].time_limit_seconds===90 && byId('training-time-help').textContent.includes('90 秒'),'duration was not saved');
+check(byId('training-live-message').textContent.includes('本轮不限时'),'saved setting altered current episode');
+byId('training-time-limit').value='0';byId('training-time-limit').dispatchEvent(new Event('input'));byId('training-time-save').click();await settle();
+check(testSettingsCommands.at(-1).time_limit_seconds===0,'unlimited setting did not persist');
+check(testCommands.length===0 && testModelCommands.length===0,'duration setting sent a robot or model command');
+''')
+
+    def test_feedback_timeout_is_visible_during_policy_and_history_survives_recovery(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.ready=false;testState.reason='arm: stale stream';testState.pilot.mode='policy';
+testState.telemetry.arm={ok:false,age:.612};await settle();
+check(byId('status').textContent.includes('612 ms'),'timeout age missing or stale policy hides fault');
+check(byId('error').textContent.includes('机械臂状态反馈超时'),'raw stale stream was not explained');
+testState.health={last_fault:{time_unix:100,reason:'arm: stale stream',ages:{arm:.612}},recovered_unix:101};
+testState.ready=true;testState.reason=null;testState.pilot.mode='locked';testState.telemetry.arm={ok:true,age:.01};
+await settle();
+check(byId('logs').textContent.includes('已保存反馈异常') && byId('logs').textContent.includes('反馈已恢复'),'transient fault disappeared');
+check(byId('error-banner').hidden,'recovered feedback remains a current error');
+check(testCommands.length===0,'diagnostics initiated robot actions');
+''')
+
+    def test_model_selection_and_preparation_never_start_robot(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'disconnected'};testState.ready=false;
+testState.experiment={phase:'idle',active:false,can_prepare:true};await settle(1200);
+check(!byId('training-workbench').hidden && !byId('model-prepare').disabled,'offline preparation unavailable');
+check(testCommands.length===0 && testModelCommands.length===0,'opening training panel caused action');
+byId('training-mode').value='resume';byId('training-mode').dispatchEvent(new Event('change'));
+byId('model-checkpoint').value='early';byId('model-prepare').click();await settle();
+check(testModelCommands[0].mode==='resume' && testModelCommands[0].model_id==='early','selected checkpoint was lost');
+check(!testState.training.enabled && byId('training-run-toggle').disabled,'preparation started or enabled disconnected robot');
+check(testCommands.length===0,'preparation sent a robot/start command');
+byId('model-end').click();await settle();
+byId('training-mode').value='fresh';byId('training-mode').dispatchEvent(new Event('change'));byId('model-prepare').click();await settle();
+check(testModelCommands.at(-1).mode==='fresh' && testModelCommands.at(-1).model_id===null,'fresh preparation reused a model');
+check(testCommands.length===0 && !testState.training.enabled,'fresh preparation started robot');
+''')
+
+    def test_training_dashboard_return_and_late_success_update(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.experiment={phase:'ready',active:true,managed:true,can_prepare:false,run_id:'run1',mode:'resume',model_label:'early'};
+testState.training={available:true,session_id:'live',episode:0,phase:'awaiting_reset',enabled:true,can_label:true,steps:95,gradient_updates:4677,episode_return:0,message:'等待标记'};
+await settle(1200);
+check(byId('training-live-return').textContent==='0','live return missing');
+check(byId('training-mean-return').textContent==='0.00' && byId('chart-return').querySelector('circle'),'history chart missing');
+testTrainingData.summary.successes=1;testTrainingData.summary.last10_successes=1;testTrainingData.summary.mean_return=1;
+Object.assign(testTrainingData.episodes[0],{outcome:'success',return_:1,success_last10:1});
+testState.training.episode_return=1;testState.training.label='success';await settle(2400);
+check(byId('training-live-return').textContent==='1' && byId('training-mean-return').textContent==='1.00','late success did not update returns');
+check(byId('training-episodes').textContent.includes('成功') && byId('training-episodes').textContent.includes('力 / 力矩保护'),'label incorrectly inferred from force stop');
+check(testCommands.length===0 && testModelCommands.length===0,'data analysis caused motion');
+check(document.documentElement.scrollWidth<=innerWidth,'training dashboard overflows mobile');
+''',width=390)
+
+    def test_unassisted_evaluation_selects_model_and_episode_count_without_motion(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.experiment={phase:'idle',active:false,can_prepare:true};await settle(1200);
+byId('training-mode').value='evaluate_unassisted';byId('training-mode').dispatchEvent(new Event('change'));
+check(!byId('evaluation-settings').hidden && !byId('model-selection').hidden,'evaluation controls missing');
+check(byId('training-mode-help').textContent.includes('关闭示范引导'),'independent mode not explained');
+byId('model-checkpoint').value='latest';byId('evaluation-episodes').value='10';byId('model-prepare').click();await settle();
+check(testModelCommands[0].mode==='evaluate_unassisted' && testModelCommands[0].model_id==='latest' && testModelCommands[0].episodes===10,'wrong evaluation mode, model or count');
+check(!testState.training.enabled && testCommands.length===0,'preparation started robot');
+''')
+
+    def test_continuous_labels_after_stop_and_pause_are_available(self):
+        self.browser(r'''
+testState.pilot.online={available:true,phase:'ended',completed_index:119};
+testState.training={available:true,session_id:'resident',episode:4,phase:'awaiting_reset',can_label:true,enabled:true,message:'回 Home 自动下一轮'};
+await settle();
+check(!byId('continuous-controls').hidden && byId('online-start').hidden,'resident controls missing');
+check(!byId('finish-success').disabled && !byId('online-success').disabled,'late label unavailable');
+byId('finish-success').click();await settle();
+check(testCommands[0].action==='success' && testCommands[0].episode===4,'label lost or attached to wrong episode');
+byId('online-toggle').click();await settle();
+check(testCommands[1].action==='pause' && byId('online-toggle').textContent.includes('继续'),'pause not shown');
+testState.training.available=false;await settle();
+check(byId('continuous-controls').hidden && byId('online-success').disabled,'stale trainer still accepts labels');
+testState.training={available:true,mode:'evaluation',phase:'completed',enabled:false,can_label:false,message:'冻结评估完成：A 3/5，B 1/5；已停止'};await settle();
+check(!byId('continuous-controls').hidden && byId('continuous-status').textContent.includes('A 3/5'),'completed evaluation result missing');
+check(byId('online-toggle').disabled && byId('online-success').disabled && byId('online-start').hidden,'completed evaluation can restart or relabel');
+''')
+
+    def test_unlabelled_stop_shows_pending_without_failure_or_zero_return(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.experiment={phase:'ready',active:true,managed:true,can_prepare:false,run_id:'run1',mode:'fresh'};
+testState.pilot.online={available:true,phase:'ended',completed_index:94};
+testState.training={available:true,session_id:'pending',episode:0,phase:'awaiting_label',enabled:true,can_label:true,steps:95,episode_return:null,label:null,message:'等待人工标记'};
+Object.assign(testTrainingData.summary,{episodes:0,pending_episodes:1,last10_count:0,mean_return:null});
+Object.assign(testTrainingData.episodes[0],{outcome:'pending',return_:null,valid:false,pending_label:true});
+await settle(1200);
+check(byId('training-live-return').textContent==='—' && byId('training-mean-return').textContent==='—','pending return reported as zero');
+check(byId('continuous-status').textContent.includes('待标记') && !byId('continuous-status').textContent.includes('默认失败'),'pending stop reported as failure');
+check(byId('training-episodes').textContent.includes('待标记') && !byId('training-episodes').textContent.includes('失败'),'pending history reported as failed');
+check(!byId('chart-return').querySelector('circle'),'unlabelled return added to chart');
+check(!byId('training-mark-success').disabled && !byId('training-mark-failure').disabled,'pending label buttons unavailable');
+check(testCommands.length===0,'pending display sent robot commands');
+''')
+
+    def test_online_mode_keeps_stop_and_blocks_conflicting_controls(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.pilot.online={available:true,phase:'active',index:12,completed_index:11};
+testState.pilot.mode='policy';await settle();
+check(!byId('online-panel').hidden,'online panel missing');
+check(byId('status').textContent.includes('策略'),'online status missing');
+check(byId('home').disabled && byId('start').disabled && byId('gripper-open').disabled,'conflicting motion allowed');
+check(!byId('finish').disabled,'online Stop unavailable');
+byId('finish').click();await settle();
+check(testCommands[0]==='finish' && current.pilot.mode==='locked','online Stop did not reach gate');
+''')
+
+    def test_recovery_check_starts_no_episode_and_keeps_stop_available(self):
+        self.browser(r'''
+check(byId('recovery-panel').hidden,'unconfigured probe offered');
+testState.runtime={autoserl_demo:true,phase:'connected'};
+testState.pilot.recovery_check={available:true,phase:'idle',point0:55,point1:103};
+testState.pilot.online={available:true,phase:'idle',completed_index:-1};
+testState.training={available:true,phase:'paused',enabled:false};
+await settle();
+check(!byId('recovery-panel').hidden && byId('recovery-check').disabled,'probe unavailable or permits a live actor');
+byId('recovery-check').click();await settle();
+check(testCommands.length===0,'disabled probe issued robot command');
+testState.training.available=false;
+testState.experiment={active:true,phase:'starting'};
+await settle();
+check(byId('recovery-check').disabled,'starting actor permits probe');
+testState.experiment={active:false,phase:'ended'};
+await settle();
+check(!byId('recovery-check').disabled && !byId('recovery-panel').hidden,'configured probe missing');
+byId('recovery-check').click();byId('recovery-check').click();await settle();
+check(testCommands.length===1 && testCommands[0]==='recovery_check','duplicate or wrong probe command');
+check(!current.recording && current.episodes.length===0,'probe created an expert episode');
+check(byId('home').disabled && byId('start').disabled && byId('gripper-open').disabled,'probe allows conflicting motion');
+check(!byId('finish').disabled,'probe cannot be stopped');
+check(byId('status').textContent.includes('接近孔口'),'probe progress missing');
+testState.pilot.recovery_check.phase='retreat_reference';
+testState.pilot.recovery_check.retreat_requirements={position_tolerance_m:.002,settle_seconds:.3};
+testState.pilot.recovery_check.retreat_progress={errors:[.0036,.01],linear_speed_m_s:.007,stable_seconds:0};
+await settle();
+check(byId('recovery-rule').textContent.includes('2 mm'),'retreat requirement missing');
+check(byId('recovery-status').textContent.includes('3.60 mm') && byId('recovery-status').textContent.includes('7.0 mm/s'),'live retreat progress missing');
+check(!byId('finish').disabled && byId('recovery-check').disabled,'settling hides Stop or permits repeated start');
+byId('finish').click();await settle();
+check(current.pilot.mode==='locked' && testCommands[1]==='finish','Stop failed');
+''')
+
     def test_prepare_gripper_does_not_record_and_blocks_start_until_feedback(self):
         self.browser(r'''
 check(testCommands.length===0,'loading page moved gripper');
@@ -95,7 +282,7 @@ check(testCommands.length===0,'demo contacted a device');
         page=(ROOT/'pilot_capture.html').read_text()
         page=re.sub(r'<script defer src="[^"]+"></script>', '', page)
         page=page.replace('<link rel="stylesheet" href="/ui/theme.css">', '<style>'+(ROOT/'pilot_ui/theme.css').read_text()+'</style>')
-        scripts='\n'.join((ROOT/'pilot_ui'/name).read_text() for name in ('api.js','demo.js','cameras.js','catalog.js','records.js','app.js'))
+        scripts='\n'.join((ROOT/'pilot_ui'/name).read_text() for name in ('api.js','demo.js','cameras.js','catalog.js','records.js','training.js','app.js'))
         report=r'''
 const settle=(ms=650)=>new Promise(resolve=>setTimeout(resolve,ms));
 const check=(condition,message)=>{if(!condition)throw Error(message);};

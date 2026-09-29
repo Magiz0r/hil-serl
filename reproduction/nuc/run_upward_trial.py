@@ -21,6 +21,7 @@ def main():
     mode.add_argument("--execute-attended-manual", action="store_true")
     parser.add_argument("--no-trial-bounds", action="store_true")
     parser.add_argument("--official-input", action="store_true")
+    parser.add_argument("--autoserl-demo", action="store_true")
     parser.add_argument("--pilot-gate", action="store_true")
     parser.add_argument("--official-home", action="store_true")
     parser.add_argument("--home-switch-probe", action="store_true")
@@ -30,6 +31,10 @@ def main():
     parser.add_argument("--rotation-response", choices=("standard", "fast", "responsive"), default="standard")
     args = parser.parse_args()
     manual, free = args.execute_attended_manual, args.no_trial_bounds
+    if args.autoserl_demo and (not args.official_input or not args.pilot_gate or args.speed_scale != 1.
+            or args.translation_scale not in (None, 1.) or args.rotation_scale not in (None, 1.)
+            or args.rotation_response != 'standard'):
+        parser.error('--autoserl-demo requires pilot gate, official input, unit scales and standard response')
     if free and not manual:
         parser.error("--no-trial-bounds requires manual mode")
     if args.official_input and not (manual and free):
@@ -53,6 +58,10 @@ def main():
         action_flag += " --no-trial-bounds"
     if args.official_input:
         action_flag += " --official-input"
+    if args.autoserl_demo:
+        if not args.official_input or not args.pilot_gate:
+            parser.error('--autoserl-demo requires official input and pilot gate')
+        action_flag += " --autoserl-demo"
     if args.official_home:
         action_flag += " --official-home"
     if args.home_switch_probe:

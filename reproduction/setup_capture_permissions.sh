@@ -23,7 +23,7 @@ cat > "$capture_rules" <<EOF
 # HIL-SERL capture access for the primary group of $capture_user (GID $capture_group).
 # Group ACLs preserve existing owners, modes and desktop-session user ACLs.
 # Match the configured exterior USB port and wrist model, not /dev/video numbers.
-ACTION=="add|change", SUBSYSTEM=="video4linux", ATTR{index}=="0", ENV{ID_VENDOR_ID}=="2b03", ENV{ID_MODEL_ID}=="f880", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:6.1:1.0", RUN+="/usr/bin/setfacl -m g:$capture_group:rw /dev/%k"
+ACTION=="add|change", SUBSYSTEM=="video4linux", ATTR{index}=="0", ENV{ID_VENDOR_ID}=="2b03", ENV{ID_MODEL_ID}=="f880", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:3.4.1:1.0", RUN+="/usr/bin/setfacl -m g:$capture_group:rw /dev/%k"
 ACTION=="add|change", SUBSYSTEM=="video4linux", ATTR{index}=="0", ENV{ID_VENDOR_ID}=="2b03", ENV{ID_MODEL_ID}=="f682", ENV{ID_SERIAL}=="Technologies__Inc._ZED-M", RUN+="/usr/bin/setfacl -m g:$capture_group:rw /dev/%k"
 ACTION=="add|change", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="256f", ATTRS{idProduct}=="c63a", RUN+="/usr/bin/setfacl -m g:$capture_group:rw /dev/%k"
 EOF
@@ -36,7 +36,7 @@ fi
 
 # Apply the rules to these attached devices; no USB reset or robot operation.
 for capture_device in \
-  /dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.1:1.0-video-index0 \
+  /dev/v4l/by-path/pci-0000:00:14.0-usb-0:3.4.1:1.0-video-index0 \
   /dev/v4l/by-id/usb-Technologies__Inc._ZED-M-video-index0; do
   if [[ -e "$capture_device" ]]; then
     capture_sysfs="$(/usr/bin/udevadm info --query=path --name="$capture_device")"

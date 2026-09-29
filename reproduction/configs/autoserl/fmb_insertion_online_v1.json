@@ -1,0 +1,66 @@
+{
+  "schema": "autoserl_online_plan_v1",
+  "initial_pose": [
+    0.43326544761657715,
+    -0.02631250023841858,
+    0.34870222210884094,
+    0.9998987941174647,
+    -0.009687692491908359,
+    -0.003509046064612887,
+    -0.00981003222923309
+  ],
+  "custom_home_q": [
+    -0.019905971363186836,
+    -0.22445836663246155,
+    -0.042214345186948776,
+    -2.5472192764282227,
+    0.013497631996870041,
+    2.317971706390381,
+    -0.050865788012742996
+  ],
+  "workspace_low": [
+    0.4132645535469055,
+    -0.06598287865519524,
+    0.22839644277095794
+  ],
+  "workspace_high": [
+    0.5037479889392853,
+    -0.006307782158255577,
+    0.35887346625328065
+  ],
+  "gripper_position": 129,
+  "force_limit_N": 10.0,
+  "torque_limit_Nm": 1.0,
+  "contact_stop_mode": "robot_reflex",
+  "max_steps": null,
+  "demo_pickle_sha256": "a7e601992ec41000c04fa4e51be60e4e80f3cbc6f74c0b0b911c7e9d09e03ff3",
+  "demo_manifest_sha256": "757109203fb24ef94fb8ebd6b966294a66ff2eb78a53a2174ec0ae59a043924c",
+  "layout": {
+    "id": "layout_9e76cf1d66c6",
+    "task_id": "task_895741dfcc8a",
+    "name": "Insert layout2",
+    "domain": "real",
+    "ood": false,
+    "created_unix": 1790376363.6693122
+  },
+  "control_compliance": {
+    "translational_stiffness": 3000.0,
+    "translational_damping": 89.0,
+    "rotational_stiffness": 150.0,
+    "rotational_damping": 7.0,
+    "translational_Ki": 0.0,
+    "rotational_Ki": 0.0,
+    "translational_clip_x": 0.0075,
+    "translational_clip_y": 0.0016,
+    "translational_clip_z": 0.0055,
+    "translational_clip_neg_x": 0.003,
+    "translational_clip_neg_y": 0.0016,
+    "translational_clip_neg_z": 0.005,
+    "rotational_clip_x": 0.01,
+    "rotational_clip_y": 0.025,
+    "rotational_clip_z": 0.02,
+    "rotational_clip_neg_x": 0.01,
+    "rotational_clip_neg_y": 0.025,
+    "rotational_clip_neg_z": 0.02
+  }
+}

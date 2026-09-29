@@ -22,4 +22,10 @@ PYTHONDONTWRITEBYTECODE=1 XLA_PYTHON_CLIENT_PREALLOCATE=false python reproductio
 
 后两个脚本验证 GPU/依赖和合成训练更新，不证明真实任务学习收敛。运行中产生的日志放入 `reproduction/logs/`；大体积 wheel 缓存保留在被忽略的 `reproduction/nuc/wheels/`。
 
+AutoSERL 的完整 batch=256 SAC 编译曾触发 CUDA 12.6 `ptxas` / Triton GEMM 崩溃。
+`autoserl/bootstrap.py` 默认添加 `--xla_gpu_enable_triton_gemm=false`；显式同名配置
+优先，实际 flags 写入实验 manifest。这一配置已在本机 GPU 验证，未改变网络或
+学习超参数。只运行 CPU 单元测试不能替代新机器的 GPU 编译检查。
+W&B 使用独立可选同步入口，读取本机 SDK 登录；认证文件不提交 Git。
+
 网页使用原生 HTML/CSS/JavaScript，没有 npm 构建步骤。视频导出与回放测试需要系统 `ffmpeg` / `ffprobe`，浏览器回归使用 `google-chrome`；本机已安装。测试中的 HTTP、Unix socket 和 Chrome 使用回环地址/临时目录，在禁止 socket 或浏览器子进程的沙箱内会被系统拒绝。NUC ROS/C++ 插件构建单独在固定镜像内完成，不属于上述 Python 测试命令。

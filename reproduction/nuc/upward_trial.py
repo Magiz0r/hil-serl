@@ -29,6 +29,16 @@ TARGET_TOPIC = "/hil_serl_preflight/unused_equilibrium_pose"
 WORKSPACE = "/opt/venv/franka-0.18.0/franka_catkin_ws"
 
 
+def recovery_plan():
+    path = Path(__file__).parent / 'autoserl_recovery_plan.json'
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def online_plan():
+    path = Path(__file__).parent / 'autoserl_online_plan.json'
+    return json.loads(path.read_text()) if path.exists() else None
+
+
 def emit(**data):
     data["server_time"] = time.monotonic()
     print(json.dumps(data, allow_nan=False), flush=True)
@@ -57,6 +67,7 @@ def main():
     parser.add_argument("--no-trial-bounds", action="store_true",
                         help="manual only: remove trial workspace and session timers")
     parser.add_argument("--official-input", action="store_true")
+    parser.add_argument("--autoserl-demo", action="store_true")
     parser.add_argument("--pilot-gate", action="store_true")
     parser.add_argument("--official-home", action="store_true")
     parser.add_argument("--home-switch-probe", action="store_true",
@@ -69,6 +80,10 @@ def main():
     manual = args.execute_attended_manual
     free = args.no_trial_bounds
     official = args.official_input
+    if args.autoserl_demo and (not official or not args.pilot_gate or args.speed_scale != 1.
+            or args.translation_scale not in (None, 1.) or args.rotation_scale not in (None, 1.)
+            or args.rotation_response != 'standard'):
+        parser.error('--autoserl-demo requires pilot gate, official input, unit scales and standard response')
     if free and not manual:
         parser.error("--no-trial-bounds requires manual mode")
     if official and not (manual and free):
@@ -114,6 +129,9 @@ def main():
                                   SESSION_SECONDS, IDLE_SECONDS, LINEAR_SPEED, ANGULAR_SPEED,
                                   ACTION_PERIOD, POSITION_ACTION_SCALE, ROTATION_ACTION_SCALE,
                                   ACTION_JOINT_SPEED)
+        if args.autoserl_demo:
+            from autoserl_capture import DemoGuard, ActionJournal, COMPLIANCE, PROTOCOL
+            ManualGuard = DemoGuard
 
     os.umask(0o007)
     scripts = Path(__file__).parent
@@ -132,6 +150,7 @@ def main():
                    "angular_speed_deg_s": float(np.rad2deg(ANGULAR_SPEED)),
                    "session_seconds": SESSION_SECONDS, "idle_seconds": IDLE_SECONDS}
         outcome["pilot_gate"] = args.pilot_gate
+        outcome['demo_protocol'] = PROTOCOL if args.autoserl_demo else None
         outcome["official_home"] = args.official_home
         if rotation_build:
             outcome['rotation_controller_build'] = rotation_build
@@ -155,7 +174,7 @@ def main():
         if free:
             outcome.update(workspace_radius_mm=None, orientation_radius_deg=None,
                            session_seconds=None, idle_seconds=None)
-    controller = subscriber = publisher = pilot = None
+    controller = subscriber = publisher = pilot = journal = None
     shared, lock = {}, threading.Lock()
     recent_states = deque(maxlen=100)
     sample = None
@@ -290,6 +309,8 @@ def main():
                     for sign in ("", "neg_"):
                         if original_config["rotational_clip_" + sign + axis] != 0.03:
                             raise ValueError("unexpected rotational error clipping")
+            if args.autoserl_demo:
+                compliance = dict(COMPLIANCE)
             new_config = config_client.update_configuration(compliance)
             if any(new_config[k] != v for k, v in compliance.items()):
                 raise ValueError("compliance update was not confirmed")
@@ -321,9 +342,21 @@ def main():
                     goal = list(sample['q']) if args.home_switch_probe else HOME_Q
                     from official_home import MINIMUM_HOME_SECONDS
                     from custom_home import CustomHomeStore
-                    pilot = OfficialHomeMotion(guard, chain, JointHome(ROSSwitcher(goal), goal,
+                    motion_class, motion_options = OfficialHomeMotion, {}
+                    plan = recovery_plan() if args.autoserl_demo else None
+                    if plan is not None:
+                        from recovery_check import RecoveryCheckMotion
+                        motion_class = RecoveryCheckMotion
+                        motion_options = dict(recovery_plan=plan, recovery_log=run / 'recovery-checks.jsonl')
+                        online = online_plan()
+                        if online is not None:
+                            from online_motion import OnlineMotion
+                            motion_class = OnlineMotion
+                            motion_options.update(online_plan=online,
+                                                  online_log=run / 'online-actions.jsonl')
+                    pilot = motion_class(guard, chain, JointHome(ROSSwitcher(goal), goal,
                         minimum_duration=0. if args.home_switch_probe else MINIMUM_HOME_SECONDS),
-                        custom_store=CustomHomeStore('/hil-serl-state/custom_home.json'))
+                        custom_store=CustomHomeStore('/hil-serl-state/custom_home.json'), **motion_options)
                     outcome['home_switch_probe'] = args.home_switch_probe
                     outcome['joint_goal'] = list(goal)
                 else:
@@ -366,7 +399,11 @@ def main():
             outcome["motion_origin"] = sample
             outcome["published_targets"] = 0
             probe_started = time.monotonic()
-            with (run / "samples.jsonl").open("x") as samples:
+            if args.autoserl_demo:
+                journal = ActionJournal(run / 'demo-actions.jsonl')
+            # This journal is also the live observation transport. Do not wait
+            # for an 8 KiB text buffer before making a new state visible.
+            with (run / "samples.jsonl").open("x", buffering=1) as samples:
                 while free or time.monotonic() < (session_deadline if manual else window.deadline):
                     now, data = time.monotonic(), snapshot()
                     if rospy.is_shutdown():
@@ -421,7 +458,10 @@ def main():
                             sent_target = list(target)
                             sent_quat = list(quat)
                             outcome["published_targets"] += 1
+                        if journal:
+                            journal.observe(guard, pilot, packet, now)
                     samples.write(json.dumps({"state": sample, "target": sent_target,
+                                              **({'autoserl_state':guard.capture_observation} if args.autoserl_demo else {}),
                                               "target_quaternion": sent_quat,
                                               "input": packet, "armed": guard.armed,
                                               **({"pilot": pilot.status()} if pilot else {})}) + "\n")
@@ -455,6 +495,11 @@ def main():
             exit_code = 0
     finally:
         if pilot:
+            if hasattr(pilot, 'finish_probe'):
+                try:
+                    pilot.finish_probe(outcome.get('error', 'controller session ended'))
+                except Exception as error:
+                    outcome['recovery_log_error'] = str(error)
             outcome["pilot"] = pilot.status()
         outcome["movement_commanded"] = outcome.get("published_targets", 0) > 0
         if outcome.get("completed"):
@@ -466,6 +511,8 @@ def main():
             emit(phase="stopping", **outcome)
         except BrokenPipeError:
             pass
+        if journal is not None:
+            journal.close()
         if publisher is not None:
             publisher.unregister()
         if subscriber is not None:

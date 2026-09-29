@@ -125,3 +125,20 @@ def test_evaluation_never_uses_demo_intervention(tmp_path):
     _, _, _, _, info = env.step(np.zeros(6))
     assert not info['auto_intervention']
     assert env.total_recover_cnt == 0
+
+
+def test_unassisted_policy_bypasses_queued_recovery_and_preserves_abort(tmp_path):
+    env = build(tmp_path, enable_interventions=False)
+    env.unwrapped.currpos[:3] = [.025, 0, 0]
+    env.intervened_slide_idx = 2
+    env.before_intervened_completed_traj_min_idx = 2
+    env.recover_action_list = [np.ones(6)]
+    action = np.array([.1, -.2, .3, -.1, .2, -.3])
+    for _ in range(5):
+        actual, replaced = env.cal_action(action)
+        np.testing.assert_array_equal(actual, action)
+        assert not replaced
+    env.expert.abort = True
+    _, reward, done, _, info = env.step(action)
+    assert done and not reward and not info['auto_intervention']
+    assert env.total_recover_cnt == 0

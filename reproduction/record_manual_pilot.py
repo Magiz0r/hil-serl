@@ -31,6 +31,10 @@ from pilot_web import asset, stream_status
 from pilot_catalog import CaptureCatalog
 from pilot_records import EpisodeLibrary
 from pilot_video import VideoExporter
+from pilot_online import OnlineAPI
+from pilot_training import session_status, session_command
+from nuc.latest_jsonl import LatestJSONL
+from pilot_health import HealthJournal
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,21 +90,19 @@ class Camera:
 
 class LocalTail:
     def __init__(self, path):
-        self.file = Path(path).open()
-        self.file.seek(0, 2)
+        self.reader = LatestJSONL(path)
         self.value = None
 
     def poll(self):
-        while True:
-            position = self.file.tell()
-            line = self.file.readline()
-            if not line or not line.endswith('\n'):
-                self.file.seek(position)
-                return self.value
-            self.value = dict(pc_received_at=time.monotonic(), data=json.loads(line))
+        data = self.reader.poll()
+        if data is not None:
+            # Producers stamp actual PC receipt. Reading old queued data must
+            # not make it fresh again; fallback supports older saved sessions.
+            self.value = dict(pc_received_at=data.get('pc_received_at', time.monotonic()), data=data)
+        return self.value
 
     def close(self):
-        self.file.close()
+        self.reader.close()
 
 
 class RobotReader:
@@ -116,27 +118,24 @@ class RobotReader:
 import json, sys, time
 from pathlib import Path
 root = Path('/home/tasl/hil_serl_runtime_20260918')
+sys.path.insert(0, str(root / 'source'))
+from latest_jsonl import LatestJSONL
 path = root / 'state/logs' / RUN_NAME / 'samples.jsonl'
 assert path.resolve() == path and path.is_file()
 print(json.dumps(dict(kind='manifest', source_sha256=json.loads((root/'source-sha256.json').read_text()))), flush=True)
-with path.open() as stream:
-    stream.seek(0, 2)
+stream = LatestJSONL(path)
+try:
     updated = started = time.monotonic()
     while time.monotonic() - started < 28800:
-        latest = None
-        while True:
-            position = stream.tell()
-            line = stream.readline()
-            if not line or not line.endswith('\n'):
-                stream.seek(position)
-                break
-            latest = json.loads(line)
+        latest = stream.poll()
         if latest is not None:
             updated = time.monotonic()
             print(json.dumps(dict(kind='state', source_read_at=updated, sample=latest)), flush=True)
         elif time.monotonic() - updated > 5:
             break
         time.sleep(.02)
+finally:
+    stream.close()
 '''
         self.process = subprocess.Popen([
             'ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
@@ -149,14 +148,20 @@ with path.open() as stream:
         self.thread.start()
 
     def read(self):
+        previous_pc = previous_source = None
         try:
             for line in self.process.stdout:
                 data = json.loads(line)
                 if data['kind'] == 'manifest':
                     atomic_json(self.directory / 'nuc-source-manifest.json', data)
                 else:
+                    received = time.monotonic()
+                    source = data['source_read_at']
+                    timing = dict(receive_gap=None if previous_pc is None else received-previous_pc,
+                                  source_gap=None if previous_source is None else source-previous_source)
                     with self.lock:
-                        self.value = dict(pc_received_at=time.monotonic(), data=data)
+                        self.value = dict(pc_received_at=received, data=data, timing=timing)
+                    previous_pc, previous_source = received, source
             self.error = 'robot state reader ended; attach to the next manual session to resume'
         except Exception as error:
             self.error = str(error)
@@ -191,22 +196,28 @@ class Recorder:
         self.commands = queue.Queue(maxsize=8)
         self.done, self.lock = threading.Event(), threading.Lock()
         self.episode = None
+        self.online_api = OnlineAPI(self)
+        self.latest_snapshot = None
+        self.health_journal = HealthJournal(directory / 'health-events.jsonl')
         self.status = dict(recording=False, ready=False, reason='starting cameras and state reader',
                            directory=str(directory), episodes=[], sample_count=0,
                            task=task, session_started_unix=time.time(), sample_hz=10)
         records = [json.loads(line) for line in (session / 'events.jsonl').read_text().splitlines()]
         configured = next(row for row in records if row['phase'] == 'configured')
+        self.demo_protocol = configured.get('demo_protocol')
         if records[-1]['phase'] != 'ready' or time.time() - (session / 'events.jsonl').stat().st_mtime > 2:
             raise ValueError('selected manual session is not currently ready')
         if not configured.get('pilot_gate'):
             raise ValueError('restart manual control with --pilot-gate for Start/Finish/Home')
         run_name = Path(configured['run_directory']).name
-        atomic_json(directory / 'session.json', dict(schema=SCHEMA, purpose='raw_pilot_not_trainer_export',
+        atomic_json(directory / 'session.json', dict(schema=SCHEMA,
+            purpose='autoserl_demo_raw_with_action_journal' if self.demo_protocol else 'raw_pilot_not_trainer_export',
             task=task, cameras=settings, control_log_directory=str(session), control_configuration=configured,
             sample_hz=10, camera_timestamp='PC monotonic immediately after UVC read; no hardware synchronization',
             state_timestamp='NUC monotonic plus PC receipt time; clocks are not directly subtracted',
             image_format='single-eye JPEG at camera resolution; decode BGR then convert RGB for learning',
-            action_semantics='raw normalized SpaceMouse input plus applied pose target and observed gripper command ID; no policy-action conversion yet',
+            action_semantics=('executed 6D body-frame decisions in NUC demo-actions.jsonl; collect trace and export after operator labels success'
+                if self.demo_protocol else 'raw normalized SpaceMouse input plus applied pose target and observed gripper command ID; no policy-action conversion yet'),
             label_semantics='episode outcome from operator; intermediate frames are not automatically labelled successful',
             created_utc=datetime.now(timezone.utc).isoformat(),
             recorder_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()))
@@ -228,7 +239,8 @@ class Recorder:
             raise
 
     def snapshot(self):
-        return dict(arm=self.reader.snapshot(), control=self.control.poll(), gripper=self.gripper.poll(),
+        control, gripper = self.control.poll(), self.gripper.poll()
+        return dict(arm=self.reader.snapshot(), control=control, gripper=gripper,
                     cameras={name: camera.snapshot() for name, camera in self.cameras.items()})
 
     def end(self, outcome, reason=None):
@@ -263,15 +275,21 @@ class Recorder:
 
     def work(self):
         next_sample = time.monotonic()
+        previous_loop = next_sample
         try:
             while not self.done.is_set():
                 self.gate.refresh()
+                read_started = time.monotonic()
                 snapshot = self.snapshot()
                 now = time.monotonic()
                 problem = self.reader.error or next((c.error for c in self.cameras.values() if c.error), None)
                 problem = problem or health_error(snapshot, now, allow_home_transition=self.episode is None)
                 pilot = ((snapshot.get('arm') or {}).get('data', {}).get('sample', {}).get('pilot', {}))
                 mode = pilot.get('mode')
+                if mode in ('recovery_check','policy') and not problem:
+                    expected = pilot['online' if mode=='policy' else 'recovery_check']['gripper_position']
+                    if abs(snapshot['gripper']['data']['status']['gPO']-expected) > 3:
+                        problem = '验证时夹爪开度发生变化，已请求停止'
                 preparation = preparation_status((snapshot.get('gripper') or {}).get('data', {}))
                 if problem:
                     self.fail_locked(problem)
@@ -342,14 +360,29 @@ class Recorder:
                                 custom_home=copy.deepcopy(pilot.get('custom_home')))
                             self.episode = Episode(self.directory / new_episode_name(),
                                 metadata, now)
+                            if getattr(self, 'demo_protocol', None):
+                                self.episode.metadata['demo_protocol'] = self.demo_protocol
                             # Begin data before the first permitted motion command.
                             self.episode.append(snapshot, now)
                             next_sample = now + .1
                             self.issue('start', now)
+                            self.episode.metadata['control_start_command_id'] = self.pending['id']
                         elif command in PREPARE_ACTIONS:
                             if snapshot['gripper']['data'].get('preparation_supported') is not True:
                                 raise ValueError('当前控制会话版本不支持网页开合夹爪，请断开并重新连接控制')
                             self.issue(command, now)
+                        elif command == 'recovery_check':
+                            recovery = pilot.get('recovery_check', {})
+                            gripper = snapshot['gripper']['data']['status']
+                            if not recovery.get('available') or not getattr(self, 'demo_protocol', None):
+                                raise ValueError('当前会话未配置 AutoSERL 回退验证')
+                            if abs(gripper['gPO']-recovery['gripper_position']) > 3:
+                                raise ValueError('夹爪开度与示范不匹配，请检查插块夹持位置')
+                            self.issue(command, now)
+                        elif command == 'policy_start':
+                            if not getattr(self,'demo_protocol',None) or not pilot.get('online',{}).get('available'):
+                                raise ValueError('当前会话未提供 AutoSERL 在线控制')
+                            self.issue(command,now)
                         elif command in ('set_home', 'home','set_custom_home','custom_home'):
                             if command == 'home' and not pilot.get('home_set'):
                                 raise ValueError('请先设置 Home')
@@ -367,7 +400,13 @@ class Recorder:
                 if self.episode and now >= next_sample:
                     self.episode.append(snapshot, now)
                     next_sample = now + .1
+                journal = getattr(self, 'health_journal', None)
+                if journal:
+                    journal.observe(snapshot, now, problem, loop_gap=now-previous_loop,
+                                    snapshot_seconds=now-read_started)
+                previous_loop = now
                 with self.lock:
+                    self.latest_snapshot = snapshot
                     self.status.update(recording=self.episode is not None, ready=problem is None,
                         reason=problem, pilot=pilot, pending=self.pending,
                         sample_count=self.episode.count if self.episode else 0,
@@ -377,6 +416,8 @@ class Recorder:
                         gripper_preparation=preparation,
                         camera_ages={name: round(now - c['pc_captured_at'], 3) if c else None
                                      for name, c in snapshot['cameras'].items()})
+                    if journal:
+                        self.status['health'] = journal.status()
                 self.done.wait(.02)
         except Exception as error:
             try:
@@ -402,22 +443,34 @@ class Recorder:
                 except ValueError:
                     status.update(task=None, layout=None, prompt='')
             if hasattr(self,'library'):status['episodes']=self.library.list()
+            status['training']=session_status()
             return status
 
     def catalog_action(self, data):
         with self.lock:
             if (self.episode or self.pending or getattr(self, 'command_in_progress', False)
-                    or not self.commands.empty() or self.status.get('pilot', {}).get('mode') in ('manual', 'waiting_for_center', 'homing')):
+                    or not self.commands.empty() or self.status.get('pilot', {}).get('mode') in ('manual', 'waiting_for_center', 'homing', 'recovery_check', 'policy')):
                 raise ValueError('请先 Finish，等待当前操作完成，再修改任务或 Layout')
             frames = {name: camera.snapshot() for name, camera in self.cameras.items()} if data.get('action') == 'layout_capture' else None
             return self.catalog.apply(data, frames)
 
-    def command(self, command):
-        if command not in ('start', 'finish', 'finish_success', 'finish_failure', 'finish_discard', 'set_home', 'home','set_custom_home','custom_home', *PREPARE_ACTIONS):
+    def training_request(self, data):
+        result=session_command(data)
+        if data['action'] in ('success','failure','pause') and self.get_status().get('pilot',{}).get('mode')=='policy':
+            self.command('finish',source='training')
+        return result
+
+    def command(self, command, *, source='operator'):
+        if command not in ('start', 'finish', 'finish_success', 'finish_failure', 'finish_discard', 'set_home', 'home','set_custom_home','custom_home', 'recovery_check', 'policy_start', *PREPARE_ACTIONS):
             raise ValueError('unknown recorder command')
         if self.done.is_set() or self.get_status().get('fatal'):
             raise ValueError('recorder is stopped')
         if command.startswith('finish'):
+            if command=='finish' and source=='operator' and not getattr(self,'episode',None):
+                training=session_status()
+                if training.get('available'):
+                    try:session_command(dict(action='pause',session_id=training['session_id'],episode=training['episode']))
+                    except ValueError:pass  # Stale training UI must never prevent robot Stop.
             # Finish takes priority and cancels clicks queued before it.
             with self.lock:
                 if command!='finish' and not self.episode:
@@ -523,6 +576,16 @@ def handler_for(recorder):
                 self.send(200, *resource)
             elif path == '/status':
                 self.send(200, json.dumps(recorder.get_status()).encode(), 'application/json')
+            elif path in ('/models','/training-data') and hasattr(recorder,'experiments'):
+                try:
+                    if path=='/models':result=recorder.experiments.catalog(force=True)
+                    else:
+                        from urllib.parse import parse_qs
+                        rid=parse_qs(urlparse(self.path).query).get('run',[''])[0]
+                        result=recorder.experiments.metrics(rid)
+                    self.send(200,json.dumps(result,allow_nan=False).encode(),'application/json')
+                except (ValueError,OSError,KeyError) as error:
+                    self.send(400,json.dumps(dict(error=str(error))).encode(),'application/json')
             elif path == '/tasks':
                 self.send(200, json.dumps(recorder.catalog.snapshot()).encode(), 'application/json')
             elif path.startswith('/episodes') and hasattr(recorder, 'library'):
@@ -557,7 +620,7 @@ def handler_for(recorder):
             try:
                 if not self.valid_host():
                     raise ValueError('host rejected')
-                if self.path not in ('/command', '/catalog', '/runtime', '/episodes') or self.headers.get('Content-Type') != 'application/json':
+                if self.path not in ('/command', '/catalog', '/runtime', '/episodes', '/autoserl', '/training', '/training-settings', '/experiments') or self.headers.get('Content-Type') != 'application/json':
                     raise ValueError('expected recorder JSON command')
                 origin = self.headers.get('Origin')
                 if origin and origin != 'http://' + self.headers.get('Host', ''):
@@ -568,6 +631,26 @@ def handler_for(recorder):
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError('expected a JSON object')
+                if self.path == '/experiments':
+                    if not hasattr(recorder,'experiment_request'):raise ValueError('当前网页不提供模型管理')
+                    self.send(200,json.dumps(recorder.experiment_request(data)).encode(),'application/json')
+                    return
+                if self.path == '/training':
+                    result=recorder.training_request(data)
+                    self.send(200,json.dumps(result).encode(),'application/json')
+                    return
+                if self.path == '/training-settings':
+                    if not hasattr(recorder,'training_settings_request'):raise ValueError('当前网页不提供训练设置')
+                    result=recorder.training_settings_request(data)
+                    self.send(200,json.dumps(result).encode(),'application/json')
+                    return
+                if self.path == '/autoserl':
+                    if self.client_address[0] != '127.0.0.1':
+                        raise ValueError('Online action API is loopback-only')
+                    result=(recorder.online_request(data) if hasattr(recorder,'online_request')
+                            else recorder.online_api.request(data))
+                    self.send(200,json.dumps(result,allow_nan=False).encode(),'application/json')
+                    return
                 if self.path == '/runtime':
                     if not hasattr(recorder, 'runtime_action'):
                         raise ValueError('此启动模式不提供控制会话管理')
@@ -586,7 +669,7 @@ def handler_for(recorder):
                     raise ValueError('unexpected command fields')
                 recorder.command(data['command'])
                 self.send(202, b'{"accepted":true}', 'application/json')
-            except (ValueError, queue.Full) as error:
+            except (ValueError, queue.Full, OSError) as error:
                 self.send(400, json.dumps(dict(error=str(error))).encode(), 'application/json')
     return Handler
 

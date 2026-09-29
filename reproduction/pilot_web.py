@@ -10,6 +10,7 @@ ASSETS = {
     '/ui/cameras.js': ('pilot_ui/cameras.js', 'text/javascript; charset=utf-8'),
     '/ui/catalog.js': ('pilot_ui/catalog.js', 'text/javascript; charset=utf-8'),
     '/ui/records.js': ('pilot_ui/records.js', 'text/javascript; charset=utf-8'),
+    '/ui/training.js': ('pilot_ui/training.js', 'text/javascript; charset=utf-8'),
     '/ui/app.js': ('pilot_ui/app.js', 'text/javascript; charset=utf-8'),
 }
 
