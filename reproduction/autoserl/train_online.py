@@ -176,7 +176,7 @@ def checkpoint_metadata(previous, checkpoint_path, demo_sha256, *, algorithm='au
     return checkpoint,int(checkpoint.stem.split('_')[-1]),matches[-1]['online_steps']
 
 
-def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None, algorithm='autoserl'):
+def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None, algorithm='autoserl', reward_identity=None):
     """Restore real trajectories, including earlier runs in a resume chain."""
     previous=Path(previous).resolve();seen=set() if seen is None else seen
     if previous in seen:raise ValueError('Cyclic resume history')
@@ -184,6 +184,8 @@ def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None, algor
     manifest=json.loads((previous/'manifest.json').read_text())
     from .provenance import require_algorithm
     require_algorithm(manifest,algorithm)
+    if reward_identity is not None and manifest.get('reward_identity')!=reward_identity:
+        raise ValueError('续训奖励分类器不一致，或旧记录使用人工奖励；请从头训练')
     if not manifest.get('eligible_for_training', True):
         raise ValueError('Evaluation data cannot be resumed as a training run')
     if manifest['synthetic'] or manifest['demo_sha256']!=demo_sha256:
@@ -192,7 +194,7 @@ def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None, algor
     if manifest.get('resume_from'):
         ancestor=Path(manifest['resume_from'])
         if not ancestor.is_absolute():ancestor=ROOT/ancestor
-        _,_,restored=restore_run(ancestor,demo_sha256,seen,checkpoint_path=manifest.get('resume_checkpoint'),algorithm=algorithm)
+        _,_,restored=restore_run(ancestor,demo_sha256,seen,checkpoint_path=manifest.get('resume_checkpoint'),algorithm=algorithm,reward_identity=reward_identity)
     checkpoints=sorted((previous/'learner').glob('checkpoint_*.msgpack')) or sorted(previous.glob('checkpoint_*.msgpack'))
     if not checkpoints:raise ValueError(f'No saved learner checkpoint in {previous}')
     checkpoint=Path(checkpoint_path).resolve() if checkpoint_path else checkpoints[-1]
@@ -231,7 +233,7 @@ def restore_run(previous, demo_sha256, seen=None, *, checkpoint_path=None, algor
 
 
 class ProcessTraining:
-    def __init__(self, output, sample_obs, demo, *, resume_from=None, resume_checkpoint=None, algorithm='autoserl', **config):
+    def __init__(self, output, sample_obs, demo, *, resume_from=None, resume_checkpoint=None, algorithm='autoserl', reward_identity=None, **config):
         import jax
         import numpy as np
         from .online_env import IMAGE_KEYS
@@ -243,7 +245,7 @@ class ProcessTraining:
         if resume_from:
             from .online_env import load_config
             selection,_=load_config(ROOT)
-            checkpoint,updates,restored=restore_run(resume_from,selection['demo_pickle_sha256'],checkpoint_path=resume_checkpoint,algorithm=algorithm)
+            checkpoint,updates,restored=restore_run(resume_from,selection['demo_pickle_sha256'],checkpoint_path=resume_checkpoint,algorithm=algorithm,reward_identity=reward_identity)
             config.update(initial_checkpoint=str(checkpoint),initial_updates=updates)
             self.gradient_updates=updates
         ctx=multiprocessing.get_context('spawn')
@@ -348,12 +350,18 @@ def main(*, algorithm='autoserl'):
     else:base=PortalEnv(ROOT)
     selection=base.selection
     with (ROOT/selection['demo_path']).open('rb') as f:demo=pickle.load(f)
+    reward_identity=None;classifier=None
+    if algorithm=='hilserl':
+        from reproduction.hilserl.reward_classifier import load_active
+        from reproduction.hilserl.online_env import ClassifierReward,relabel_demo
+        classifier=load_active(ROOT);reward_identity=classifier.metadata['identity']
+        demo=relabel_demo(demo,classifier)
     # Compile from the real demo's shapes before connecting physical control.
     sample_obs=demo[0]['observations']
-    training=ProcessTraining(args.output,sample_obs,demo,algorithm=algorithm,batch_size=args.batch_size,
+    training=ProcessTraining(args.output,sample_obs,demo,algorithm=algorithm,reward_identity=reward_identity,batch_size=args.batch_size,
                       training_starts=args.training_starts,capacity=args.capacity,resume_from=args.resume_from,resume_checkpoint=args.resume_checkpoint,
                       start_paused=args.continuous)
-    env=base
+    env=ClassifierReward(base,classifier) if classifier is not None else base
     if algorithm=='autoserl':
         env=AutoIntervention(base,np.zeros(6),expert=PortalSignals(),demo_path=ROOT/selection['demo_path'],
             demo_initial_tcp_pose=selection['demo_initial_tcp_pose'],recover_point0=selection['recover_point0'],
@@ -369,7 +377,12 @@ def main(*, algorithm='autoserl'):
         resume_from=str(args.resume_from.resolve()) if args.resume_from else None,
         xla_flags=os.environ.get('XLA_FLAGS',''))
     manifest['human_intervention']=algorithm=='hilserl'
-    manifest['reward_source']='operator labels; no learned reward classifier'
+    manifest['reward_source']='classifier' if classifier else 'operator'
+    manifest['reward_identity']=reward_identity
+    manifest['reward_classifier']=classifier.metadata if classifier else None
+    manifest['demo_transitions_used']=len(demo)
+    if classifier:
+        with gzip.open(args.output/'classifier-labelled-demo.pkl.gz','wb') as stream:pickle.dump(demo,stream)
     manifest['human_action_selection']='at acknowledged decision boundaries; release to policy on neutral input'
     manifest['continuous']=args.continuous
     manifest['contact_stop_mode']=base.plan.get('contact_stop_mode','force_limit')

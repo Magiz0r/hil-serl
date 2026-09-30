@@ -9,13 +9,13 @@
 | 项目 | 已验证内容 |
 | --- | --- |
 | Python / GPU | 独立 Conda `hilserl`，Python 3.10.21，JAX 0.4.35 / jaxlib 0.4.34，RTX 4090 计算通过 |
-| 离线功能 | 2026-09-29 完整回归 328 项通过，覆盖采集、HTTP、Chrome 界面、Home、夹爪、续训和评估；使用模拟硬件 |
+| 离线功能 | 2026-09-30 完整回归 347 项通过，覆盖采集、HTTP、Chrome 界面、Home、夹爪、分类器、原版入口、续训和评估；使用模拟硬件 |
 | 相机 | 外部视角已切至第三台 ZED 2i（USB `3.4.1`），腕部仍为 ZED-M；两路 15 FPS 读取、约 10 Hz 记录 |
 | 夹爪 | Robotiq 2F-85 USB-RS485；FC03 通过，已激活且无错误；左右键开合、接触停止和双键退出实测通过 |
 | 机械臂 | FR3 系统 5.9.2；保持、六轴平移和旋转实测，最后一轮无机器人错误 |
 | 人工输入 | SpaceMouse Wireless BT USB `256f:c63a`；无需按住左键，双键退出；`--with-gripper` 可启用左右键开合 |
 | 数据 | 当前一条 FMB 成功示范为 171 条 transition，恢复点 60/90；旧 147 条示范另存历史 |
-| HIL-SERL | 人工接管基线离线完成；GPU 合成 120 步、60 个人工干预、冻结权重校验通过；NUC 尚未部署，真机待验证 |
+| HIL-SERL | 原版 actor/learner 入口及奖励分类器标注、训练、验证、接入完成离线检查；真实分类器待标注训练，NUC 尚未部署 |
 | AutoSERL | 当前续训 20 轮成功 14/20，后十轮 10/10 且自动干预占 18.4%；冻结模型无干预评估 1/10，独立策略尚不稳定 |
 | 模型与分析 | 网页选择 checkpoint、Return / 成功率 / 干预率 / Loss 曲线与 CSV；独立 W&B 数值同步；训练累积 3258 条 online，最终 checkpoint 6772 |
 
@@ -30,7 +30,7 @@ reproduction/
 ├── portal/       # 网页、录制、实验管理；static/ 保存前端
 ├── desktop/      # SpaceMouse 与夹爪通信桥
 ├── autoserl/     # 示范导出、自动干预、训练、评估及专项检查
-├── hilserl/      # 人工接管训练与独立冻结评估入口
+├── hilserl/      # 原版脚本入口、FMB 适配、奖励分类器数据和训练
 ├── nuc/          # NUC 控制源码、构建与部署清单
 ├── tools/        # 按需运行的检查、预览和部署工具
 ├── tests/        # Desktop / 网页 / 控制适配的离线回归
@@ -46,7 +46,7 @@ reproduction/
 | [desktop/README.md](desktop/README.md) | 实际运行需要的桌面控制桥 |
 | [tools/README.md](tools/README.md) | 按需运行的独立工具及设备权限配置 |
 | [autoserl/README.md](autoserl/README.md) | 当前训练、续训、评估操作 |
-| [hilserl/README.md](hilserl/README.md) | 人工接管基线、NUC 更新和验证边界 |
+| [hilserl/README.md](hilserl/README.md) | 原版训练入口、奖励分类器、NUC 更新及验证边界 |
 | [autoserl/RESULTS.md](autoserl/RESULTS.md) | 实验数据与模型来源 |
 | [nuc/README.md](nuc/README.md) | 保持原部署路径的 NUC 源码与插件 |
 | [environment/README.md](environment/README.md) | 安装、锁文件与离线验证 |

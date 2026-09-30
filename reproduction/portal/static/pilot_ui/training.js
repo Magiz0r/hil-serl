@@ -29,10 +29,10 @@ const PilotTrainingUI = (() => {
     const mode=get('training-mode').value;
     get('model-selection').hidden=mode==='fresh';get('evaluation-settings').hidden=!['evaluate','evaluate_unassisted'].includes(mode);
     set('training-mode-help',({fresh:'沿用当前 1 条 demo，初始化新模型和新训练记录。旧记录保留。',resume:'加载所选模型及其保存时已有的数据，开启新一段训练；自动干预重新启用。',evaluate:'固定所选模型参数，按指定轮数评估；保留自动干预，结果单独保存。',evaluate_unassisted:'冻结所选模型，关闭示范引导和自动回退重放，测试策略独立表现。仍需人工标记成功 / 失败并复位。'})[mode]);
-    if(hil)set('training-mode-help',mode==='evaluate_unassisted'?'冻结 HIL-SERL 模型，关闭人工接管和自动恢复，测试独立成功率。':mode==='resume'?'恢复 HIL-SERL 模型和当时的数据；SpaceMouse 随时可接管。':'当前 1 条 demo 初始化独立 HIL-SERL 模型；移动 SpaceMouse 接管，回中交还策略。不启用自动恢复。');
+    if(hil)set('training-mode-help',mode==='evaluate_unassisted'?'冻结 HIL-SERL 模型，关闭人工接管和自动恢复，测试独立成功率。':mode==='resume'?'恢复 HIL-SERL 模型和当时的数据；SpaceMouse 随时可接管。':'使用已选奖励分类器与当前示范，初始化 HIL-SERL 模型；移动 SpaceMouse 接管，回中交还策略。');
     for(const id of ['training-algorithm','training-mode','model-run','model-checkpoint','evaluation-episodes'])get(id).disabled=pending || !!job.active;
     const selectionOK=mode==='fresh' || !!get('model-checkpoint').value;
-    get('model-prepare').disabled=!online || !loaded || pending || job.can_prepare!==true || !selectionOK || !!state.recording;
+    get('model-prepare').disabled=!online || !loaded || pending || job.can_prepare!==true || !selectionOK || (hil && catalog.reward_ready===false) || !!state.recording;
     get('model-end').disabled=!online || pending || !job.managed || job.phase==='stopping';
     set('model-job-state',({idle:'未启动',loading:'加载模型中',ready:'已准备',stopping:'保存并退出中',ended:'已结束',error:'启动失败',external:'其他训练进程运行中'})[job.phase] || '等待网页状态');
     set('model-job-detail',job.model_label?`${(job.algorithm_id || 'autoserl').toUpperCase()} · ${labels[job.mode] || ''} · ${job.model_label}`:'');
@@ -80,13 +80,14 @@ const PilotTrainingUI = (() => {
   }
   function showMetrics(data){
     const s=data.summary;
+    const classifier=data.episodes.some(e=>e.reward_source==='classifier');
     set('training-success-total',`${s.successes} / ${s.episodes}`);
     set('training-success-recent',`${s.last10_successes} / ${s.last10_count}`);
     const hil=data.algorithm_id==='hilserl';
     set('training-intervention-label',hil?'人工干预动作':'自动干预动作');set('training-intervention-column',hil?'人工干预':'自动干预');
     set('training-mean-return',fmt(s.mean_return));set('training-auto-fraction',pct(hil?s.human_fraction:s.automatic_fraction));
     const selected=catalog.runs.find(r=>r.id===data.run_id);
-    set('training-data-note',`${selected?.kind==='evaluation'?'冻结评估':'在线训练'} · ${s.transitions.toLocaleString()} 步 · ${s.pending_episodes || 0} 轮待标记 · ${s.excluded_episodes} 轮中断 / 排除。待标记回合不计成功率和平均 Return。最多显示最近 1000 轮。`);
+    set('training-data-note',`${selected?.kind==='evaluation'?'冻结评估':'在线训练'} · ${classifier?'分类器判定结果 · ':''}${s.transitions.toLocaleString()} 步 · ${s.pending_episodes || 0} 轮待标记 · ${s.excluded_episodes} 轮中断 / 排除。待标记回合不计成功率和平均 Return。最多显示最近 1000 轮。`);
     const valid=data.episodes.filter(e=>e.valid);
     chart('chart-return',valid.map(e=>[e.episode,e.return_]),{range:[0,1]});
     chart('chart-success',valid.map(e=>[e.episode,e.success_last10]),{range:[0,1],percentage:true});
@@ -95,7 +96,7 @@ const PilotTrainingUI = (() => {
     set('learner-summary',last?`更新 ${last.updates.toLocaleString()} · 在线数据 ${last.online_steps ?? '—'} 步 · Actor Loss ${fmt(last.actor_loss,4)} · 策略熵 ${fmt(last.entropy,3)}`:'暂无学习日志；冻结评估不更新参数。');
     const rows=data.episodes.slice().reverse().map(e=>{
       const tr=document.createElement('tr'),count=hil?e.human_interventions:e.automatic_interventions;
-      for(const text of [e.episode,e.pending_label?'待标记':e.valid?(e.outcome==='success'?'成功':'失败'):'排除',fmt(e.return_,0),e.steps,count==null?'—':`${count} (${pct(e.steps?count/e.steps:0)})`,reasonLabels[e.reason] || e.reason || '人工停止',e.pending_label?'等待人工标记':!e.valid?'中断，不计成功率':e.provisional?'可补标':'已保存']){const td=document.createElement('td');td.textContent=text;tr.append(td);}
+      for(const text of [e.episode,e.pending_label?'待标记':e.valid?(e.outcome==='success'?'成功':'失败'):'排除',fmt(e.return_,0),e.steps,count==null?'—':`${count} (${pct(e.steps?count/e.steps:0)})`,reasonLabels[e.reason] || e.reason || '人工停止',e.pending_label?'等待人工标记':!e.valid?'中断，不计成功率':e.operator_review?`人工复核：${e.operator_review==='success'?'成功':'失败'}`:e.provisional?'可补标':'已保存']){const td=document.createElement('td');td.textContent=text;tr.append(td);}
       return tr;
     });
     get('training-episodes').replaceChildren(...rows);get('training-empty').hidden=!!rows.length;get('training-export').disabled=!rows.length;
@@ -136,9 +137,12 @@ const PilotTrainingUI = (() => {
     set('training-live-step',active?`${t.episode+1} / ${t.steps ?? 0}`:'—');
     set('training-live-updates',active?(t.frozen?'冻结 · 0':Number(t.gradient_updates || 0).toLocaleString()):'—');
     set('training-live-phase',active?(t.frozen?'冻结评估':'在线训练'):'未运行');
-    set('training-live-model',s.experiment?.model_label || '');set('training-live-message',(t.message || '准备任务后在这里开始。')+(t.phase==='running'?` · 控制来源：${({human:'人工',automatic:'自动恢复',policy:'策略'})[t.intervention_source] || '策略'}`:'')+(t.phase==='running'?` · 本轮${t.time_limit_seconds?t.time_limit_seconds+' 秒上限':'不限时'}`:''));
+    const prediction=t.classifier_probability==null?'':` · 成功概率 ${(t.classifier_probability*100).toFixed(1)}%`;
+    set('training-live-model',s.experiment?.model_label || '');set('training-live-message',(t.message || '准备任务后在这里开始。')+prediction+(t.phase==='running'?` · 控制来源：${({human:'人工',automatic:'自动恢复',policy:'策略'})[t.intervention_source] || '策略'}`:'')+(t.phase==='running'?` · 本轮${t.time_limit_seconds?t.time_limit_seconds+' 秒上限':'不限时'}`:''));
     get('training-run-toggle').disabled=!active || (!t.enabled && !s.ready);
     set('training-run-toggle',t.enabled?'暂停运行':'开始运行');
+    set('training-mark-success',t.reward_source==='classifier'?'复核：实际成功':'本轮成功');
+    set('training-mark-failure',t.reward_source==='classifier'?'复核：实际失败':'本轮失败');
     for(const id of ['training-mark-success','training-mark-failure'])get(id).disabled=!active || !t.can_label;
     if(loaded){
       follow();if(chosenRun!==get('training-history').value)lastMetricAt=0;

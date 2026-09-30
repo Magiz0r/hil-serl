@@ -588,6 +588,16 @@ def handler_for(recorder):
                     self.send(200,json.dumps(result,allow_nan=False).encode(),'application/json')
                 except (ValueError,OSError,KeyError) as error:
                     self.send(400,json.dumps(dict(error=str(error))).encode(),'application/json')
+            elif path in ('/reward','/reward-frame') and hasattr(recorder,'reward_workbench'):
+                try:
+                    if path=='/reward':result=recorder.reward_workbench.status()
+                    else:
+                        from urllib.parse import parse_qs
+                        fid=parse_qs(urlparse(self.path).query).get('id',[''])[0]
+                        result=recorder.reward_workbench.data.preview(fid)
+                    self.send(200,json.dumps(result,allow_nan=False).encode(),'application/json')
+                except (ValueError,OSError,KeyError) as error:
+                    self.send(400,json.dumps(dict(error=str(error))).encode(),'application/json')
             elif path == '/tasks':
                 self.send(200, json.dumps(recorder.catalog.snapshot()).encode(), 'application/json')
             elif path.startswith('/episodes') and hasattr(recorder, 'library'):
@@ -622,7 +632,7 @@ def handler_for(recorder):
             try:
                 if not self.valid_host():
                     raise ValueError('host rejected')
-                if self.path not in ('/command', '/catalog', '/runtime', '/episodes', '/autoserl', '/training', '/training-settings', '/experiments') or self.headers.get('Content-Type') != 'application/json':
+                if self.path not in ('/command', '/catalog', '/runtime', '/episodes', '/autoserl', '/training', '/training-settings', '/experiments', '/reward') or self.headers.get('Content-Type') != 'application/json':
                     raise ValueError('expected recorder JSON command')
                 origin = self.headers.get('Origin')
                 if origin and origin != 'http://' + self.headers.get('Host', ''):
@@ -633,6 +643,13 @@ def handler_for(recorder):
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError('expected a JSON object')
+                if self.path == '/reward':
+                    if not hasattr(recorder,'reward_workbench'):raise ValueError('当前入口未提供奖励分类器')
+                    if data.get('action') in ('train','activate') and recorder.experiment_manager.status()['active']:
+                        raise ValueError('请先结束 RL 任务，再训练或切换奖励分类器')
+                    result=recorder.reward_workbench.request(data,recorder.cameras)
+                    self.send(200,json.dumps(result,allow_nan=False).encode(),'application/json')
+                    return
                 if self.path == '/experiments':
                     if not hasattr(recorder,'experiment_request'):raise ValueError('当前网页不提供模型管理')
                     self.send(200,json.dumps(recorder.experiment_request(data)).encode(),'application/json')

@@ -19,12 +19,15 @@ window.testState={ready:true,recording:false,episodes:[],sample_count:0,director
  task:{name:'block_into_cup'},sample_hz:10,camera_ages:{external:.02,wrist:.03},telemetry:{gripper:{ok:true,age:.02,detail:'保持',preparation_supported:true},gripper_position:0},
  pilot:{mode:'locked',home_set:true,home_kind:'official_joint',home:{q:[0,-.78,0,-2.35,0,1.57,.78]},command_id:0,command:'lock',custom_home:{available:false,saving:false,q:null,persistent:true}},pending:null};
 window.testOffline=false;window.testDelay=0;window.testReject=false;
-window.testModelCommands=[];
+window.testModelCommands=[];window.testRewardCommands=[];
+window.testReward={counts:{train:{'0':0,'1':0},validation:{'0':0,'1':0}},frames:[],groups:{},sources:[],models:[],running:false,active:null};
 window.testSettingsCommands=[];
 window.testModels={initial_demo_episodes:1,demo_name:'single-demo.pkl',runs:[{id:'run1',name:'training-50',kind:'training',checkpoints:[{id:'latest',updates:13588,saved_unix:1790294046},{id:'early',updates:4677,saved_unix:1790292083}]}]};
 window.testTrainingData={run_id:'run1',name:'training-50',generated_unix:1790294046,summary:{episodes:1,excluded_episodes:0,successes:0,last10_successes:0,last10_count:1,mean_return:0,transitions:95,automatic_fraction:.4},episodes:[{episode:1,outcome:'failure',return_:0,steps:95,automatic_interventions:38,reason:'force_limit',valid:true,provisional:true,success_last10:0}],learner:[{updates:13588,online_steps:6398,q:1.9,critic_loss:.002,actor_loss:-1.8,entropy:-2.8}]};
 window.fetch=async(path,options={})=>{
  if(testOffline) throw Error('simulated disconnect');
+ if(path==='/reward'){if(options.method==='POST'){testRewardCommands.push(JSON.parse(options.body));return {ok:true,json:async()=>({accepted:true})};}return {ok:true,json:async()=>testReward};}
+ if(path.startsWith('/reward-frame?'))return {ok:true,json:async()=>({wrist_1:PilotDemo.image('external'),wrist_2:PilotDemo.image('wrist')})};
  if(path==='/models')return {ok:true,json:async()=>testModels};
  if(path==='/training-settings'){
   const data=JSON.parse(options.body);testSettingsCommands.push(data);testState.training_settings=data;
@@ -77,6 +80,25 @@ window.fetch=async(path,options={})=>{
 
 @unittest.skipUnless(shutil.which('google-chrome'), 'Chrome is not installed')
 class PilotBrowserTests(unittest.TestCase):
+    def test_reward_annotation_and_training_are_separate_from_robot_commands(self):
+        self.browser(r'''
+testState.runtime={autoserl_demo:true,phase:'disconnected'};testState.experiment={active:false,can_prepare:true};
+testModels.reward_ready=false;
+testReward.frames=[{id:'frame1',label:null,group:'episode1'},{id:'frame2',label:0,group:'episode1'}];
+testReward.groups={episode1:'train'};testReward.can_train=true;
+testReward.counts={train:{'0':1,'1':1},validation:{'0':1,'1':1}};
+byId('training-algorithm').value='hilserl';byId('training-algorithm').dispatchEvent(new Event('change'));await settle(1200);
+check(!byId('reward-workbench').hidden && !byId('reward-review').hidden,'classifier annotation missing');
+check(byId('model-prepare').disabled,'HIL preparation allowed without classifier');
+check(byId('reward-frame-note').textContent.includes('未标注'),'imported success episode was auto-labelled');
+byId('reward-positive').click();await settle(1200);
+check(testRewardCommands[0].action==='label' && testRewardCommands[0].id==='frame1' && testRewardCommands[0].label===1,'wrong frame labelled');
+check(byId('reward-frame').value==='1','annotation did not advance');
+byId('reward-train').click();await settle(1200);
+check(testRewardCommands.at(-1).action==='train' && testRewardCommands.at(-1).threshold===.85,'original classifier train not requested');
+check(testCommands.length===0 && testModelCommands.length===0,'classifier workflow issued robot/RL commands');
+''')
+
     def test_duration_can_be_saved_while_running_without_starting_or_stopping(self):
         self.browser(r'''
 testState.runtime={autoserl_demo:true,phase:'connected'};
@@ -306,7 +328,7 @@ check(testCommands.length===0,'demo contacted a device');
         page=(ROOT/'pilot_capture.html').read_text()
         page=re.sub(r'<script defer src="[^"]+"></script>', '', page)
         page=page.replace('<link rel="stylesheet" href="/ui/theme.css">', '<style>'+(ROOT/'pilot_ui/theme.css').read_text()+'</style>')
-        scripts='\n'.join((ROOT/'pilot_ui'/name).read_text() for name in ('api.js','demo.js','cameras.js','catalog.js','records.js','training.js','app.js'))
+        scripts='\n'.join((ROOT/'pilot_ui'/name).read_text() for name in ('api.js','demo.js','cameras.js','catalog.js','records.js','training.js','reward.js','app.js'))
         report=r'''
 const settle=(ms=650)=>new Promise(resolve=>setTimeout(resolve,ms));
 const check=(condition,message)=>{if(!condition)throw Error(message);};

@@ -93,10 +93,11 @@ def test_unlabelled_protective_stop_is_pending_not_a_failed_return(tmp_path):
 
 
 @pytest.mark.parametrize('mode',['fresh','resume','evaluate_unassisted'])
-def test_hil_models_are_isolated_and_preparation_stays_paused(tmp_path,mode):
+def test_hil_models_are_isolated_and_preparation_stays_paused(tmp_path,mode,monkeypatch):
+    monkeypatch.setattr('reproduction.hilserl.reward_classifier.active_metadata',lambda root:dict(identity='classifier'))
     store,root=fixture_store(tmp_path)
     auto=store.catalog()['runs'][0]['checkpoints'][0]['id']
-    hil=root.parent/'hil';write(hil/'manifest.json',dict(schema='hilserl_online_run_v1',synthetic=False,demo_sha256='demo'))
+    hil=root.parent/'hil';write(hil/'manifest.json',dict(schema='hilserl_online_run_v1',synthetic=False,demo_sha256='demo',reward_identity='classifier'))
     (hil/'checkpoint_00000005.msgpack').write_bytes(b'hil')
     model=next(r for r in store.catalog(force=True)['runs'] if r['algorithm_id']=='hilserl')['checkpoints'][0]
     with pytest.raises(ValueError,match='baseline'):store.model(auto,'hilserl')

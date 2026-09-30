@@ -13,6 +13,7 @@
   <script defer src="/ui/catalog.js"></script>
   <script defer src="/ui/records.js"></script>
   <script defer src="/ui/training.js"></script>
+<script defer src="/ui/reward.js"></script>
   <script defer src="/ui/app.js"></script>
 </head>
 <body>
@@ -103,6 +104,17 @@
   </div>
   <section id="training-workbench" class="training-workbench" hidden aria-label="训练与数据分析">
     <div class="page-heading"><div><div class="eyebrow">ONLINE LEARNING</div><h2>训练与数据分析</h2></div><button id="models-refresh" class="button compact">刷新模型与记录</button></div>
+    <section id="reward-workbench" class="panel" hidden><details class="training-body"><summary>HIL-SERL 奖励分类器 · 先标注与训练，再准备 RL</summary>
+      <p id="reward-status" class="tiny">还未选择分类器。</p><p class="tiny">成功 = 插块完全到位；未成功包括接近、孔口卡住和部分插入。同一回合只用于训练或验证其中一边。</p>
+      <label class="field-label" for="reward-split">本次采集 / 导入用途</label><select id="reward-split"><option value="train">训练集</option><option value="validation">独立验证集 · 使用另一次完整回合</option></select>
+      <label class="field-label" for="reward-group">当前采集回合</label><input id="reward-group" readonly><button id="reward-new-group" class="button compact">复位后开始新的采集回合</button>
+      <div class="training-actions"><button id="reward-capture-positive" class="button">采当前相机：完全到位</button><button id="reward-capture-negative" class="button">采当前相机：未成功</button></div>
+      <label class="field-label" for="reward-source">已有示范 / 回合</label><select id="reward-source"></select><button id="reward-import" class="button compact">导入画面待标注</button><button id="reward-refresh" class="button compact">刷新分类器数据</button>
+      <p id="reward-counts" class="tiny"></p><div id="reward-review" hidden><div class="playback-views"><figure><img id="reward-image-1" alt="分类器外部视角裁剪"><figcaption>外部视角 · 128×128</figcaption></figure><figure><img id="reward-image-2" alt="分类器腕部视角裁剪"><figcaption>腕部视角 · 128×128</figcaption></figure></div>
+      <input id="reward-frame" type="range" min="0" value="0" aria-label="分类器标注帧"><p id="reward-frame-note" class="tiny"></p><div class="training-actions"><button id="reward-positive" class="button success">这帧完全到位</button><button id="reward-negative" class="button">这帧未成功</button><button id="reward-skip" class="button compact">不确定 / 清除标签</button></div></div>
+      <label class="field-label" for="reward-epochs">原版训练迭代次数</label><input id="reward-epochs" type="number" min="1" max="10000" value="150"><label class="field-label" for="reward-threshold">成功概率阈值</label><input id="reward-threshold" type="number" min="0.01" max="0.99" step="0.01" value="0.85">
+      <button id="reward-train" class="button primary">训练原版奖励分类器</button><label class="field-label" for="reward-model">已验证的分类器</label><select id="reward-model"></select><p id="reward-validation" class="tiny"></p><button id="reward-activate" class="button">选用该分类器</button><p id="reward-error" class="bad" role="alert"></p>
+    </details></section>
     <div class="training-grid">
       <section class="panel training-setup"><div class="panel-heading"><h2>准备任务</h2><span id="model-job-state" class="tiny">未启动</span></div><div class="training-body">
         <label class="field-label" for="training-algorithm">算法</label><select id="training-algorithm"><option value="autoserl">AutoSERL · 自动干预</option><option value="hilserl">HIL-SERL · 人工接管</option></select>
@@ -120,7 +132,7 @@
         <div class="training-kpis"><div><span>本轮 Return</span><strong id="training-live-return">—</strong></div><div><span>回合 / 步数</span><strong id="training-live-step">—</strong></div><div><span>模型更新次数</span><strong id="training-live-updates">—</strong></div></div>
         <p id="training-live-model" class="tiny"></p><p id="training-live-message" aria-live="polite">准备任务后在这里开始。</p>
         <div class="training-actions"><button id="training-run-toggle" class="button primary" disabled>开始运行</button><button id="training-mark-success" class="button success" disabled>本轮成功</button><button id="training-mark-failure" class="button danger" disabled>本轮失败</button></div>
-        <p class="tiny">当前奖励：插入成功为 1，否则为 0。过程中 Return 通常为 0；停止后补标会更新最终 Return。独立策略评估关闭自动干预，辅助评估保留自动干预。</p>
+        <p class="tiny">当前奖励：插入成功为 1，否则为 0。HIL-SERL 使用训练后的分类器自动判断；人工按钮仅用于复核及停止。过程中 Return 通常为 0；停止后补标会更新最终 Return。独立策略评估关闭自动干预，辅助评估保留自动干预。</p>
       </div></section>
     </div>
     <section class="panel training-data"><div class="panel-heading"><h2>历史记录与曲线</h2><button id="training-export" class="text-button" disabled>导出回合 CSV ↗</button></div>

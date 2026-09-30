@@ -145,7 +145,8 @@ class EvaluationRunner(ContinuousRunner):
                      automatic_assistance=self.automatic_assistance)
         assistance = '有自动干预' if self.automatic_assistance else '无自动干预'
         if phase == 'running' and not self.automatic_assistance:
-            message = '策略独立运行；左键成功，右键失败'
+            message = ('策略独立运行；分类器自动判断成功，人工按钮只复核 / 停止'
+                if self.reward_source=='classifier' else '策略独立运行；左键成功，右键失败')
         if phase != 'completed':
             message = f"{assistance} · 冻结评估 {min(self.episode+1, len(self.schedule))}/{len(self.schedule)} · {name} {trial['pair']}/{per_model} · "+message
         super().set_status(phase, message=message, **extra)
@@ -175,9 +176,9 @@ class EvaluationRunner(ContinuousRunner):
         row.update(trial, evaluation=True, gradient_updates=0,
                    automatic_assistance=self.automatic_assistance,
                    checkpoint=self.training.checkpoints[trial['condition']])
-        row['evaluation_valid'] = committed
+        row['evaluation_valid'] = committed and row['outcome'] in ('success','failure')
         if not row['evaluation_valid']:
-            row['exclusion_reason'] = 'awaiting_operator_label'
+            row['exclusion_reason'] = 'interrupted' if row['outcome']=='interrupted' else 'awaiting_operator_label'
         atomic_json(path, row)
         self.report()
         return committed
@@ -303,6 +304,14 @@ def main(*, algorithm='autoserl'):
             from reproduction.hilserl.online_env import HILPortalEnv
             base=HILPortalEnv(ROOT,evaluation=True)
         else:base=PortalEnv(ROOT)
+        classifier=None
+        if algorithm=='hilserl':
+            from reproduction.hilserl.reward_classifier import load_active
+            from reproduction.hilserl.online_env import ClassifierReward
+            classifier=load_active(ROOT)
+            source_manifest=json.loads((args.source_run/'manifest.json').read_text())
+            if source_manifest.get('reward_identity')!=classifier.metadata['identity']:
+                raise ValueError('评估必须使用训练时的奖励分类器；不能混入旧人工奖励模型')
         selection = base.selection
         trials=schedule()
         if args.checkpoint:
@@ -316,17 +325,19 @@ def main(*, algorithm='autoserl'):
         args.output.mkdir(parents=True, exist_ok=False)
         atomic_json(args.output/'manifest.json', dict(schema=f'{algorithm}_frozen_evaluation_v1',algorithm_id=algorithm,human_intervention=False,
             synthetic=False, eligible_for_training=False, initial_demo_episodes=1,
+            reward_source='classifier' if classifier else 'operator',
+            reward_identity=classifier.metadata['identity'] if classifier else None,
             demo_sha256=selection['demo_pickle_sha256'], source_run=str(args.source_run.resolve()),
             checkpoints=checkpoints, schedule=trials, gradient_updates=0,
             automatic_assistance=not args.disable_automatic_assistance, reset_intervention_state_each_trial=True,
             start_paused=not args.start_at_home,
             action_sampling='stochastic as in training; same seed within each A/B pair',
-            success_criterion='operator-confirmed fully inserted; post-stop labels accepted',
+            success_criterion='trained binary classifier' if classifier else 'operator-confirmed fully inserted; post-stop labels accepted',
             online_plan=base.plan, online_plan_sha256=base.plan_sha, image_preprocessing=base.preprocessing))
         with (ROOT/selection['demo_path']).open('rb') as stream:
             demo = pickle.load(stream)
         policy = FrozenPolicy(args.output, demo[0]['observations'], checkpoints)
-        env=base
+        env=ClassifierReward(base,classifier) if classifier else base
         if algorithm=='autoserl':
             env = AutoIntervention(base, np.zeros(6), expert=PortalSignals(), demo_path=ROOT/selection['demo_path'],
                 demo_initial_tcp_pose=selection['demo_initial_tcp_pose'], recover_point0=selection['recover_point0'],

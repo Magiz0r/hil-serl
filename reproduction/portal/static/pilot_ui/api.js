@@ -3,7 +3,7 @@
 const PilotAPI = (() => {
   const isDemo = new URLSearchParams(location.search).get('demo') === '1';
   async function request(path, options = {}) {
-    const response = await fetch(path, {cache: 'no-store', ...options, signal: AbortSignal.timeout(2000)});
+    const response = await fetch(path, {cache: 'no-store', ...options, signal: AbortSignal.timeout(path==='/reward'?30000:2000)});
     if (!response.ok) {
       let message = `HTTP ${response.status}`;
       try { message = (await response.json()).error || message; } catch (_) { /* non-JSON error */ }
@@ -23,6 +23,9 @@ const PilotAPI = (() => {
     models: () => request('/models'),
     trainingData: run => request('/training-data?run='+encodeURIComponent(run)),
     experiment: data => request('/experiments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
+    reward: () => request('/reward'),
+    rewardFrame: id => request('/reward-frame?id='+encodeURIComponent(id)),
+    rewardAction: data => request('/reward',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
     frames: id => isDemo ? Promise.resolve([{seconds:0,external:PilotDemo.image('external'),wrist:PilotDemo.image('wrist')}]) : request('/episodes/'+id+'/frames'),
     review: data => isDemo ? PilotDemo.review(data) : request('/episodes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
     command: command => isDemo ? PilotDemo.command(command) : request('/command', {

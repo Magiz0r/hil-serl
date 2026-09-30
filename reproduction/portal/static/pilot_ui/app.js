@@ -198,6 +198,7 @@ function showEpisode(episode) {
 }
 function render() {
   PilotTrainingUI.render(current || {},connected);
+  PilotRewardUI.render(current || {});
   const s=current || {}, mode=renderControls();
   const task=s.task?.name;
   write('task-name',task || '等待任务配置');
@@ -390,6 +391,7 @@ setInterval(()=>{
 PilotCatalogUI.init();
 PilotRecordsUI.init();
 PilotTrainingUI.init();
+PilotRewardUI.init();
 PilotCameras.start();
 setInterval(refresh,500);
 refresh();

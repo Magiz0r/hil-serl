@@ -70,14 +70,19 @@ def snapshot(folder):
             continue
         success = int(row['outcome'] == 'success')
         successes.append(success); steps += row['transitions']
+        classifier_reward=manifest.get('reward_source')=='classifier'
         intervention = row.get('automatic_interventions')
         values = {
-            'episode': row['episode'] + 1, 'return': float(success), 'success': success,
+            'episode': row['episode'] + 1, 'return': row.get('return_',float(success)) if classifier_reward else float(success), 'success': success,
             'success_rate': sum(successes) / len(successes),
             'success_rate_last10': sum(successes[-10:]) / len(successes[-10:]),
             'steps': row['transitions'], 'environment_steps': steps,
             'stop_reason': row.get('reason') or 'operator_stop',
         }
+        if classifier_reward:
+            values['classifier_success']=success
+            if row.get('operator_review') in ('success','failure'):values['operator_review_success']=int(row['operator_review']=='success')
+            if row.get('classifier_probability') is not None:values['classifier_probability']=row['classifier_probability']
         if intervention is not None:
             auto += intervention; known_steps += row['transitions']
             values['automatic_interventions'] = intervention
@@ -131,7 +136,10 @@ def snapshot(folder):
     config['algorithm_id']=algorithm
     config['human_intervention']=manifest.get('human_intervention',False)
     config['automatic_assistance'] = manifest.get('automatic_assistance', algorithm=='autoserl')
-    config['reward_definition'] = 'operator-confirmed success=1, failure=0; final labels only'
+    config['reward_source']=manifest.get('reward_source','operator')
+    config['reward_identity']=manifest.get('reward_identity')
+    config['reward_definition'] = ('classifier probability exceeds saved threshold; operator review never changes reward'
+        if config['reward_source']=='classifier' else 'operator-confirmed success=1, failure=0; final labels only')
     config['metric_source'] = 'saved local logs; no images, videos, replay or weights uploaded'
     if manifest.get('resume_from'):
         config['resume_from'] = Path(manifest['resume_from']).name

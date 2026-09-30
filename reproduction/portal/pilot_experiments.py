@@ -54,6 +54,9 @@ class ExperimentStore:
             if not force and self.cached is not None and time.monotonic()-self.cached_at<2:
                 return self.cached
             selection=read_json(self.root/'reproduction/configs/autoserl/fmb_insertion_recovery_v1.json')
+            from reproduction.hilserl.reward_classifier import active_metadata
+            try:reward=active_metadata(self.root)
+            except (ValueError,OSError,KeyError):reward=None
             runs=[];self.runs={};self.models={}
             for path in self.logs.rglob('manifest.json'):
                 try:
@@ -66,6 +69,7 @@ class ExperimentStore:
                     algorithm=algorithm_id(manifest)
                     is_training=schema==f'{algorithm}_online_run_v1' and manifest.get('eligible_for_training',True)
                     compatible=manifest.get('demo_sha256')==selection['demo_pickle_sha256']
+                    if algorithm=='hilserl':compatible=compatible and reward is not None and manifest.get('reward_identity')==reward['identity']
                     checkpoints=[]
                     if is_training and compatible:
                         candidates=list((folder/'learner').glob('checkpoint_*.msgpack')) or list(folder.glob('checkpoint_*.msgpack'))
@@ -80,7 +84,7 @@ class ExperimentStore:
                     self.runs[rid]=folder;runs.append(row)
                 except (OSError,ValueError,KeyError,TypeError):continue
             runs.sort(key=lambda r:r['created_unix'],reverse=True)
-            self.cached=dict(runs=runs,initial_demo_episodes=1,demo_name=Path(selection['demo_path']).name)
+            self.cached=dict(reward_ready=reward is not None,runs=runs,initial_demo_episodes=1,demo_name=Path(selection['demo_path']).name)
             self.cached_at=time.monotonic()
             return self.cached
 
@@ -106,10 +110,11 @@ class ExperimentStore:
                     recoveries=row.get('recoveries')
                     if recoveries is not None and not row.get('evaluation'):
                         total=recoveries;recoveries=max(0,total-previous_recoveries);previous_recoveries=total
-                    pending_label=row['outcome'] not in ('success','failure')
-                    valid=row.get('evaluation_valid',True) and not pending_label
+                    pending_label=row['outcome'] not in ('success','failure','interrupted')
+                    valid=row.get('evaluation_valid',True) and not pending_label and row['outcome']!='interrupted'
                     episodes.append(dict(episode=int(row['episode'])+1,outcome=row['outcome'],
-                        return_=None if pending_label else 1. if row['outcome']=='success' else 0.,steps=steps,
+                        return_=None if pending_label else row.get('return_',float(row['outcome']=='success')),steps=steps,
+                        reward_source=row.get('reward_source','operator'),operator_review=row.get('operator_review'),
                         automatic_interventions=row.get('automatic_interventions'),human_interventions=row.get('human_interventions'),recoveries=recoveries,
                         reason=row.get('reason'),condition=row.get('condition'),valid=valid,pending_label=pending_label,
                         exclusion_reason=row.get('exclusion_reason'),provisional=bool(row.get('pending_final_replay_insert'))))
@@ -197,6 +202,9 @@ class ExperimentManager:
         mode=data['mode'];episodes=data['episodes']
         algorithm=data.get('algorithm','autoserl')
         if algorithm not in ALGORITHMS:raise ValueError('未知算法')
+        if algorithm=='hilserl':
+            from reproduction.hilserl.reward_classifier import active_metadata
+            active_metadata(self.root)
         if algorithm=='hilserl' and mode=='evaluate':raise ValueError('HIL-SERL 请使用无干预评估')
         if mode not in ('fresh','resume','evaluate','evaluate_unassisted'):raise ValueError('未知运行方式')
         if type(episodes) is not int or not 1<=episodes<=100:raise ValueError('评估轮数应为 1–100')

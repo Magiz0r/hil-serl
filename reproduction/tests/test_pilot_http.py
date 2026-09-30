@@ -16,6 +16,30 @@ from reproduction.tools.preview_pilot import PreviewHandler
 
 
 class PilotHTTPTests(unittest.TestCase):
+    def test_reward_api_is_readonly_for_get_and_rejects_cross_origin_or_live_model_change(self):
+        recorder=Mock();recorder.reward_workbench.status.return_value={'frames':[]}
+        recorder.reward_workbench.data.preview.return_value={'wrist_1':'image'}
+        recorder.reward_workbench.request.return_value={'accepted':True}
+        recorder.experiment_manager.status.return_value={'active':True}
+        server=ThreadingHTTPServer(('127.0.0.1',0),handler_for(recorder))
+        thread=threading.Thread(target=server.serve_forever,kwargs={'poll_interval':.01});thread.start()
+        host='127.0.0.1:%d'%server.server_port
+        def request(method,path,data=None,origin=None):
+            conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
+            conn.request(method,path,json.dumps(data) if data else None,
+                {'Host':host,'Origin':origin or 'http://'+host,'Content-Type':'application/json'})
+            response=conn.getresponse();code=response.status;response.read();conn.close();return code
+        try:
+            self.assertEqual(request('GET','/reward'),200)
+            self.assertEqual(request('GET','/reward-frame?id=known'),200)
+            recorder.reward_workbench.request.assert_not_called()
+            self.assertEqual(request('POST','/reward',{'action':'train'},'http://external.example'),400)
+            self.assertEqual(request('POST','/reward',{'action':'activate','id':'model'}),400)
+            recorder.reward_workbench.request.assert_not_called()
+            self.assertEqual(request('POST','/reward',{'action':'label','id':'frame','label':1}),200)
+            recorder.command.assert_not_called()
+        finally:server.shutdown();server.server_close();thread.join(timeout=2)
+
     def test_model_catalog_is_read_only_and_preparation_rejects_cross_origin(self):
         recorder=Mock()
         recorder.experiments.catalog.return_value={'runs':[]}

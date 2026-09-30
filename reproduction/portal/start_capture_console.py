@@ -65,6 +65,8 @@ class CaptureRuntime:
     def __init__(self, settings, task, runtime, autoserl_demo=False):
         self.settings, self.initial_task, self.runtime = settings, task, runtime
         self.autoserl_demo = bool(autoserl_demo)
+        from reproduction.portal.pilot_reward import RewardWorkbench
+        self.reward_workbench=RewardWorkbench(ROOT)
         self.experiments=ExperimentStore(ROOT)
         self.experiment_manager=ExperimentManager(self.experiments)
         self.catalog = CaptureCatalog(ROOT/'reproduction/data/capture_catalog', task)

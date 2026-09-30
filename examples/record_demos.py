@@ -49,7 +49,7 @@ def main(_):
         pbar.set_description(f"Return: {returns}")
 
         obs = next_obs
-        if done:
+        if done or truncated:
             if info["succeed"]:
                 for transition in trajectory:
                     transitions.append(copy.deepcopy(transition))
@@ -57,7 +57,8 @@ def main(_):
                 pbar.update(1)
             trajectory = []
             returns = 0
-            obs, info = env.reset()
+            if success_count < success_needed:
+                obs, info = env.reset()
             
     if not os.path.exists("./demo_data"):
         os.makedirs("./demo_data")

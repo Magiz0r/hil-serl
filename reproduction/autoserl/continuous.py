@@ -42,6 +42,8 @@ class ContinuousRunner:
         self.base,self.env,self.training=base,env,training
         self.algorithm_id=getattr(base,'algorithm_id','autoserl')
         self.intervention_source='policy'
+        self.reward_source=getattr(base,'reward_source','operator')
+        self.operator_review=None;self.classifier_probability=None
         self.output=Path(output);self.runtime=Path(runtime);self.session_id=uuid.uuid4().hex
         self.episode=0;self.sequence=0;self.enabled=not start_paused;self.label=None;self.pending=None
         self.ever_started=False
@@ -55,6 +57,7 @@ class ContinuousRunner:
         with self.state_lock:
             self.state=dict(algorithm_id=self.algorithm_id,intervention_source=self.intervention_source,session_id=self.session_id,episode=self.episode,phase=phase,
                 enabled=self.enabled,can_label=self.have_episode,label=self.label,
+                reward_source=self.reward_source,classifier_probability=self.classifier_probability,operator_review=self.operator_review,
                 steps=len(self.trajectory)+(self.pending is not None),reason=self.reason,
                 gradient_updates=self.training.gradient_updates)
             self.state['time_limit_seconds']=getattr(self.base,'episode_time_limit_seconds',0)
@@ -85,6 +88,11 @@ class ContinuousRunner:
             if action in ('pause','resume'):self.enabled=action=='resume'
             elif command['episode']!=self.episode:continue
             elif self.have_episode:
+                if self.reward_source=='classifier':
+                    self.operator_review=action
+                    self.training.event('operator_review',episode=self.episode,review=action)
+                    if self.state.get('phase')!='running':self.save_pending()
+                    continue
                 self.label=action
                 if self.state.get('phase')!='running':self.save_pending()
             self.training.event('session_control',episode=self.episode,command=command)
@@ -107,12 +115,15 @@ class ContinuousRunner:
         original=target/f'episode_{self.episode:04d}.pkl.gz'
         if not original.exists():self.write_episode(original,trajectory)
         labelled=copy.deepcopy(trajectory)
-        if labelled:labelled[-1].update(rewards=float(self.label=='success'),masks=0.,dones=True)
+        if labelled:
+            if self.reward_source=='operator':labelled[-1]['rewards']=float(self.label=='success')
+            labelled[-1].update(masks=0.,dones=True)
         self.write_episode(self.output/f'episode_{self.episode:04d}.pkl.gz',labelled)
         atomic_json(self.output/f'episode_{self.episode:04d}.json',dict(episode=self.episode,
             outcome=self.label or 'pending',pending_final_replay_insert=True,reason=self.reason,transitions=len(labelled),
             time_limit_seconds=getattr(self.base,'episode_time_limit_seconds',0),
-            algorithm_id=self.algorithm_id,**self.intervention_counts()))
+            algorithm_id=self.algorithm_id,reward_source=self.reward_source,operator_review=self.operator_review,
+            return_=sum(t['rewards'] for t in labelled),**self.intervention_counts()))
 
     @staticmethod
     def write_episode(path,trajectory):
@@ -122,18 +133,20 @@ class ContinuousRunner:
 
     def commit(self):
         if not self.have_episode:return True
-        if self.label not in ('success','failure'):
+        if self.label not in (('success','failure','interrupted') if self.reward_source=='classifier' else ('success','failure')):
             self.save_pending()
             return False
         if self.pending is not None:
             transition,intervened=self.pending
-            transition.update(rewards=float(self.label=='success'),masks=0.,dones=True)
+            if self.reward_source=='operator':transition['rewards']=float(self.label=='success')
+            transition.update(masks=0.,dones=True)
             self.training.insert(transition,intervened);self.trajectory.append(transition);self.interventions.append(intervened)
             self.pending=None
         self.write_episode(self.output/f'episode_{self.episode:04d}.pkl.gz',self.trajectory)
         result=dict(episode=self.episode,outcome=self.label,
             time_limit_seconds=getattr(self.base,'episode_time_limit_seconds',0),
-            label_source='operator',reason=self.reason,
+            label_source=self.reward_source,reward_source=self.reward_source,operator_review=self.operator_review,
+            classifier_probability=self.classifier_probability,reason=self.reason,
             transitions=len(self.trajectory),algorithm_id=self.algorithm_id,**self.intervention_counts(),
             recoveries=getattr(self.env,'total_recover_cnt',0),return_=sum(t['rewards'] for t in self.trajectory))
         atomic_json(self.output/f'episode_{self.episode:04d}.json',result)
@@ -157,7 +170,8 @@ class ContinuousRunner:
                 if self.have_episode and not status.get('recording') and status.get('pilot',{}).get('mode')=='locked':
                     for edge in edges:
                         if all(edge['buttons']):self.enabled=False
-                        else:self.label='failure' if edge['buttons'][1] else 'success'
+                        elif self.reward_source=='operator':self.label='failure' if edge['buttons'][1] else 'success'
+                        else:self.operator_review='failure' if edge['buttons'][1] else 'success'
                         self.training.event('post_stop_button',episode=self.episode,**edge,label=self.label)
                         self.save_pending()
                 if not self.enabled:
@@ -181,7 +195,7 @@ class ContinuousRunner:
                     if remaining==0:
                         with mailbox_lock(self.runtime):
                             self.poll_commands()
-                            if self.enabled and (not self.have_episode or self.label in ('success','failure')):
+                            if self.enabled and (not self.have_episode or self.label in ('success','failure','interrupted')):
                                 self.set_status('starting',can_label=False,message='开始下一轮')
                                 return
                 else:
@@ -195,6 +209,7 @@ class ContinuousRunner:
     def run_episode(self):
         import numpy as np
         self.label=None;self.reason=None;self.trajectory=[];self.interventions=[];self.pending=None
+        self.operator_review=None;self.classifier_probability=None
         self.ever_started=True
         obs,_=self.env.reset();self.have_episode=True
         data=self.base.transport.request(dict(operation='observe'));self.last_command=data['pilot']['online']['command_id']
@@ -204,12 +219,15 @@ class ContinuousRunner:
         self.training.event('episode_start',episode=self.episode,command_id=self.last_command)
         try:
             while True:
-                self.poll_commands();self.set_status('running',message=(
+                self.poll_commands();self.set_status('running',message=('分类器自动判断成功；移动 SpaceMouse 接管，回中交还；Stop 暂停' if self.reward_source=='classifier' else (
                     '策略运行中；移动 SpaceMouse 接管，回中交还；左键成功，右键失败'
-                    if self.algorithm_id=='hilserl' else '策略与自动干预运行中；左键成功，右键失败'))
+                    if self.algorithm_id=='hilserl' else '策略与自动干预运行中；左键成功，右键失败')))
                 if not self.enabled or self.label is not None:break
                 action=self.training.sample(obs)
                 nxt,reward,done,truncated,info=self.env.step(action)
+                self.classifier_probability=info.get('classifier_probability')
+                if info.get('operator_success'):self.operator_review='success'
+                elif info.get('operator_abort'):self.operator_review='failure'
                 if self.pending is not None:
                     transition,intervened=self.pending;self.training.insert(transition,intervened)
                     self.trajectory.append(transition);self.interventions.append(intervened)
@@ -220,10 +238,13 @@ class ContinuousRunner:
                 self.pending=(transition,human if self.algorithm_id=='hilserl' else auto);obs=nxt
                 self.training.event('step',episode=self.episode,action_index=info['action_index'],
                     auto_intervention=auto,human_intervention=human,intervention_source=self.intervention_source,
+                    reward_source=self.reward_source,classifier_probability=self.classifier_probability,
                     recoveries=info.get('auto_recovery_count',0),reward=float(reward),
                     done=bool(done),truncated=bool(truncated),reason=info['terminal_reason'],duration_seconds=info['duration_seconds'])
                 self.reason=info['terminal_reason']
                 if reward:self.label='success'
+                elif self.reward_source=='classifier' and (done or truncated):
+                    self.label='failure' if self.reason in ('time_limit','operator_abort') else 'interrupted'
                 elif info.get('operator_abort'):self.label='failure'
                 if done or truncated:break
         except (RuntimeError,ValueError) as error:
@@ -231,11 +252,13 @@ class ContinuousRunner:
             try:
                 data=self.base.transport.request(dict(operation='observe'));online=data['pilot']['online']
                 self.reason=online.get('reason') or str(error)
-                if online.get('operator_success'):self.label='success'
+                if self.reward_source=='classifier':self.label='interrupted'
+                elif online.get('operator_success'):self.label='success'
                 elif online.get('operator_abort'):self.label='failure'
             except Exception:pass
         finally:
             self.stop_robot();self.training.set_learning(False)
+            if self.reward_source=='classifier' and self.label is None:self.label='interrupted'
             if self.pending:self.pending[0].update(masks=0.,dones=True)
             self.poll_commands()
             self.save_pending();self.training.save();self.home_since=None

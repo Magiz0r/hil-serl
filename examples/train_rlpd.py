@@ -68,6 +68,14 @@ def actor(agent, data_store, intvn_data_store, env, sampling_rng):
     """
     This is the actor loop, which runs when "--actor" is set to True.
     """
+    # Compile policy inference before reset enables the hardware watchdog.
+    # Do not consume the rollout RNG or execute a physical action here.
+    _, warmup_key = jax.random.split(sampling_rng)
+    jax.block_until_ready(agent.sample_actions(
+        observations=jax.device_put(env.observation_space.sample()),
+        seed=warmup_key,
+        argmax=False,
+    ))
     if FLAGS.eval_checkpoint_step:
         success_counter = 0
         time_list = []
@@ -95,7 +103,7 @@ def actor(agent, data_store, intvn_data_store, env, sampling_rng):
                 next_obs, reward, done, truncated, info = env.step(actions)
                 obs = next_obs
 
-                if done:
+                if done or truncated:
                     if reward:
                         dt = time.time() - start_time
                         time_list.append(dt)
@@ -104,6 +112,7 @@ def actor(agent, data_store, intvn_data_store, env, sampling_rng):
                     success_counter += reward
                     print(reward)
                     print(f"{success_counter}/{episode + 1}")
+                    break
 
         print(f"success rate: {success_counter / FLAGS.eval_n_trajs}")
         print(f"average time: {np.mean(time_list)}")
@@ -169,6 +178,9 @@ def actor(agent, data_store, intvn_data_store, env, sampling_rng):
         with timer.context("step_env"):
 
             next_obs, reward, done, truncated, info = env.step(actions)
+            # Hardware adapters can report an action after workspace/joint clipping.
+            # This alone is not a human intervention.
+            actions = info.pop("executed_action", actions)
             if "left" in info:
                 info.pop("left")
             if "right" in info:
